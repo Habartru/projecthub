@@ -1,0 +1,1663 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProjectHub</title>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-card: #21262d;
+            --bg-hover: #30363d;
+            --border-color: #30363d;
+            --text-primary: #f0f6fc;
+            --text-secondary: #8b949e;
+            --text-muted: #6e7681;
+            --accent-blue: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-orange: #f78166;
+        }
+        
+        /* GitHub Light Theme */
+        [data-theme="github-light"] {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f6f8fa;
+            --bg-card: #ffffff;
+            --bg-hover: #f3f4f6;
+            --border-color: #d0d7de;
+            --text-primary: #1f2328;
+            --text-secondary: #656d76;
+            --text-muted: #8c959f;
+            --accent-blue: #0969da;
+            --accent-green: #1a7f37;
+            --accent-orange: #cf5129;
+        }
+        
+        /* Midnight OLED Theme */
+        [data-theme="midnight"] {
+            --bg-primary: #000000;
+            --bg-secondary: #0a0a0a;
+            --bg-card: #111111;
+            --bg-hover: #1a1a1a;
+            --border-color: #222222;
+            --text-primary: #e6e6e6;
+            --text-secondary: #888888;
+            --text-muted: #555555;
+            --accent-blue: #4da6ff;
+            --accent-green: #4ae168;
+            --accent-orange: #ff8a5c;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+        
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .header h1 { 
+            font-size: 18px; 
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .header h1 i {
+            color: var(--accent-blue);
+        }
+        
+        .stats {
+            display: flex;
+            gap: 20px;
+            font-size: 13px;
+        }
+        
+        .stat { 
+            display: flex; 
+            align-items: center; 
+            gap: 6px; 
+            color: var(--text-secondary);
+        }
+        .stat-value { 
+            font-weight: 700; 
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+            display: grid;
+            grid-template-columns: 240px 1fr;
+            gap: 24px;
+        }
+        
+        .sidebar {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            height: fit-content;
+            position: sticky;
+            top: 80px;
+        }
+        
+        .sidebar h3 {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .filter-btn {
+            width: 100%;
+            padding: 8px 12px;
+            background: transparent;
+            border: none;
+            border-radius: 6px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 14px;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.15s;
+            margin-bottom: 2px;
+        }
+        
+        .filter-btn:hover { 
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+        .filter-btn.active { 
+            background: var(--accent-blue);
+            color: #fff;
+            font-weight: 500;
+        }
+        
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        
+        .toolbar {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px 16px;
+        }
+        
+        .search-box {
+            flex: 1;
+            padding: 8px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        
+        .search-box:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+        
+        .search-box::placeholder {
+            color: var(--text-muted);
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s;
+        }
+        
+        .btn:hover { 
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+        
+        .btn-primary { 
+            background: var(--accent-green);
+            border-color: var(--accent-green);
+            color: #fff;
+        }
+        
+        .btn-primary:hover { 
+            background: #2ea043;
+            border-color: #2ea043;
+        }
+        
+        .projects-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+        }
+        
+        @media (max-width: 1200px) {
+            .projects-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .projects-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .project-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        
+        .project-card:hover {
+            border-color: var(--accent-blue);
+        }
+        
+        .project-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            gap: 8px;
+        }
+        
+        .project-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .project-category {
+            font-size: 11px;
+            padding: 3px 8px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+        
+        .project-path {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, monospace;
+        }
+        
+        .project-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+        
+        .tag {
+            font-size: 11px;
+            padding: 2px 8px;
+            background: rgba(63, 185, 80, 0.2);
+            border: 1px solid rgba(63, 185, 80, 0.3);
+            border-radius: 10px;
+            color: var(--accent-green);
+            font-weight: 500;
+        }
+        
+        .project-meta {
+            display: flex;
+            gap: 12px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            align-items: center;
+        }
+        
+        .actions {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+        
+        .action-btn {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        
+        .action-btn:hover { 
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+        
+        .action-btn.windsurf { 
+            background: var(--bg-card);
+            border-color: var(--border-color);
+        }
+        
+        .action-btn.windsurf:hover { 
+            background: var(--bg-hover);
+        }
+        
+        .action-btn.antigravity { 
+            background: var(--bg-card);
+            border-color: var(--border-color);
+        }
+        
+        .action-btn.antigravity:hover { 
+            background: var(--bg-hover);
+        }
+        
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .modal-overlay.active { display: flex; }
+        
+        .modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            width: 90%;
+            max-width: 800px;
+            max-height: 90vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .modal-header {
+            padding: 24px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .modal-title { font-size: 20px; font-weight: 600; }
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 24px;
+            cursor: pointer;
+        }
+        
+        .modal-body {
+            padding: 24px;
+            overflow-y: auto;
+            flex: 1;
+        }
+        
+        .section {
+            margin-bottom: 24px;
+        }
+        
+        .section h4 {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+        }
+        
+        .notes-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .note-item {
+            background: var(--bg-card);
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        
+        .note-date {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+        
+        .add-note {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        
+        .note-input {
+            flex: 1;
+            padding: 10px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+        }
+        
+        .commands-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .command-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--bg-card);
+            padding: 12px;
+            border-radius: 8px;
+        }
+        
+        .command-name {
+            font-weight: 600;
+            min-width: 100px;
+        }
+        
+        .command-cmd {
+            flex: 1;
+            font-family: monospace;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        
+        .project-label {
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-right: 6px;
+        }
+        
+        .label-favorite { background: #f0883e; color: #000; }
+        .label-working { background: #238636; color: #fff; }
+        .label-archive { background: #6e7681; color: #fff; }
+        
+        .sort-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        
+        .sort-btn {
+            padding: 8px 12px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        
+        .sort-btn:hover { background: var(--bg-hover); }
+        .sort-btn.active { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); }
+        
+        .project-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        
+        .project-card:hover {
+            border-color: var(--accent-blue);
+            transform: translateY(-2px);
+        }
+        
+        .project-card.dragging {
+            opacity: 0.5;
+            border-color: var(--accent-blue);
+            transform: scale(0.98);
+        }
+        
+        .project-card.drag-over {
+            border-top: 3px solid var(--accent-blue);
+        }
+        
+        .drag-handle {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: grab;
+            padding: 8px;
+            color: var(--text-muted);
+            font-size: 16px;
+            display: none;
+        }
+        
+        .project-card.moving {
+            animation: highlightMove 1s ease;
+        }
+        
+        @keyframes highlightMove {
+            0% { background: var(--accent-blue); transform: scale(1.02); }
+            100% { background: var(--bg-secondary); transform: scale(1); }
+        }
+        
+        .label-selector {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        
+        .label-btn {
+            padding: 6px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        
+        .label-btn:hover {
+            background: var(--bg-hover);
+        }
+        
+        .label-btn.active.label-favorite {
+            background: #f0883e;
+            color: #000;
+            border-color: #f0883e;
+        }
+        
+        .label-btn.active.label-working {
+            background: #238636;
+            color: #fff;
+            border-color: #238636;
+        }
+        
+        .label-btn.active.label-archive {
+            background: #6e7681;
+            color: #fff;
+            border-color: #6e7681;
+        }
+        
+        .move-btn {
+            background: transparent;
+            border: 1px solid #30363d;
+            border-radius: 4px;
+            color: #8b949e;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 4px 8px;
+            margin-left: 4px;
+        }
+        
+        .move-btn:hover {
+            background: #1f6feb;
+            border-color: #1f6feb;
+            color: #fff;
+        }
+        
+        .move-controls {
+            display: flex;
+            gap: 4px;
+            margin-left: auto;
+        }
+        
+        .sidebar-metrics {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border-color);
+        }
+        
+        .sidebar-metrics h3 {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            font-size: 13px;
+        }
+        
+        .metric-label {
+            color: var(--text-muted);
+        }
+        
+        .metric-value { 
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .metric-value.normal { color: var(--accent-green); }
+        .metric-value.medium { color: var(--accent-orange); }
+        .metric-value.high { color: #f85149; }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .status-active { background: #238636; color: #fff; }
+        .status-on_hold { background: #9e6a03; color: #fff; }
+        .status-completed { background: #1f6feb; color: #fff; }
+        .status-archived { background: #6e7681; color: #fff; }
+        
+        .loading {
+            text-align: center;
+            padding: 60px;
+            color: var(--text-secondary);
+        }
+        
+        .empty {
+            text-align: center;
+            padding: 60px;
+            color: var(--text-muted);
+        }
+        
+        [class*="category-@active"] { border-left: 3px solid #238636; }
+        [class*="category-@archive"] { border-left: 3px solid #6e7681; }
+        [class*="category-@experiments"] { border-left: 3px solid #f0883e; }
+        [class*="category-@games"] { border-left: 3px solid #a371f7; }
+        [class*="category-@data"] { border-left: 3px solid #58a6ff; }
+        [class*="category-@bringo"] { border-left: 3px solid #3fb950; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1><i data-lucide="folder-open"></i> ProjectHub</h1>
+        <div style="display: flex; gap: 16px; align-items: center;">
+            <div class="stats">
+                <div class="stat">
+                    <span data-i18n="header.total">Всего:</span>
+                    <span class="stat-value" id="total-count">-</span>
+                </div>
+                <div class="stat">
+                    <span data-i18n="header.active">Активных:</span>
+                    <span class="stat-value" id="active-count">-</span>
+                </div>
+            </div>
+            <button class="btn" onclick="window.location.href='/static/settings.html'" title="Настройки">
+                <i data-lucide="settings" style="width:16px;height:16px;"></i>
+            </button>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="sidebar">
+            <h3 data-i18n="sidebar.categories">Категории</h3>
+            <button class="filter-btn active" data-filter="all">
+                <i data-lucide="layout-grid" style="width:16px;height:16px;"></i> <span data-i18n="sidebar.all_projects">Все проекты</span>
+            </button>
+            <button class="filter-btn" data-filter="@active">
+                <i data-lucide="circle-dot" style="width:16px;height:16px;color:#3fb950;"></i> <span data-i18n="sidebar.active_projects">Активные</span>
+            </button>
+            <button class="filter-btn" data-filter="@experiments">
+                <i data-lucide="flask-conical" style="width:16px;height:16px;"></i> <span data-i18n="sidebar.experiments">Эксперименты</span>
+            </button>
+            <button class="filter-btn" data-filter="@games">
+                <i data-lucide="gamepad-2" style="width:16px;height:16px;"></i> <span data-i18n="sidebar.games">Игры</span>
+            </button>
+            <button class="filter-btn" data-filter="@archive">
+                <i data-lucide="archive" style="width:16px;height:16px;"></i> <span data-i18n="sidebar.archive">Архив</span>
+            </button>
+            <button class="filter-btn" data-filter="@data">
+                <i data-lucide="database" style="width:16px;height:16px;"></i> <span data-i18n="sidebar.data">Данные</span>
+            </button>
+            
+            <div class="sidebar-metrics">
+                <h3 data-i18n="sidebar.system">Система</h3>
+                <div class="metric-row">
+                    <span class="metric-label" data-i18n="system.cpu">CPU:</span>
+                    <span class="metric-value" id="cpu-metric">-</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label" data-i18n="system.ram">RAM:</span>
+                    <span class="metric-value" id="ram-metric">-</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label" data-i18n="system.disk">Disk:</span>
+                    <span class="metric-value" id="disk-metric">-</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label" data-i18n="system.uptime">Up:</span>
+                    <span class="metric-value normal" id="uptime-metric">-</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="toolbar">
+                <input type="text" class="search-box" placeholder="Поиск проектов..." id="search" data-i18n-placeholder="search.placeholder">
+                <div class="sort-controls">
+                    <span data-i18n="sort.title">Сортировка:</span>
+                    <button class="sort-btn active" data-sort="name" onclick="setSort('name')" data-i18n="sort.name">Имя</button>
+                    <button class="sort-btn" data-sort="activity" onclick="setSort('activity')" data-i18n="sort.activity">Активность</button>
+                    <button class="sort-btn" data-sort="status" onclick="setSort('status')" data-i18n="sort.status">Статус</button>
+                    <button class="sort-btn" data-sort="favorite" onclick="setSort('favorite')" data-i18n="sort.favorite">★ Избранное</button>
+                    <button class="sort-btn" data-sort="custom" onclick="setSort('custom')" data-i18n="sort.custom">Порядок</button>
+                </div>
+                <button class="btn" onclick="syncProjects()">
+                    <i data-lucide="refresh-cw" style="width:16px;height:16px;"></i> <span data-i18n="projects.sync">Синхронизировать</span>
+                </button>
+            </div>
+            
+            <div class="projects-grid" id="projects">
+                <div class="loading" data-i18n="projects.loading">Загрузка проектов...</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Project Detail Modal -->
+    <div class="modal-overlay" id="modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title" id="modal-title">Project</div>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- Content loaded dynamically -->
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Cache utilities
+        const cache = {
+            // Persistent cache (localStorage) - for settings, translations
+            persistent: {
+                get(key) {
+                    try {
+                        const item = localStorage.getItem(`ph_${key}`);
+                        if (!item) return null;
+                        const { value, timestamp, ttl } = JSON.parse(item);
+                        if (ttl && Date.now() - timestamp > ttl) {
+                            localStorage.removeItem(`ph_${key}`);
+                            return null;
+                        }
+                        return value;
+                    } catch (e) {
+                        return null;
+                    }
+                },
+                set(key, value, ttl = null) {
+                    try {
+                        localStorage.setItem(`ph_${key}`, JSON.stringify({
+                            value,
+                            timestamp: Date.now(),
+                            ttl
+                        }));
+                    } catch (e) {
+                        console.warn('localStorage failed:', e);
+                    }
+                },
+                remove(key) {
+                    localStorage.removeItem(`ph_${key}`);
+                }
+            },
+            // Session cache (sessionStorage) - for projects
+            session: {
+                get(key) {
+                    try {
+                        const item = sessionStorage.getItem(`ph_${key}`);
+                        if (!item) return null;
+                        return JSON.parse(item).value;
+                    } catch (e) {
+                        return null;
+                    }
+                },
+                set(key, value) {
+                    try {
+                        sessionStorage.setItem(`ph_${key}`, JSON.stringify({
+                            value,
+                            timestamp: Date.now()
+                        }));
+                    } catch (e) {
+                        console.warn('sessionStorage failed:', e);
+                    }
+                }
+            }
+        };
+
+        // Debounce utility
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // Visibility API - pause/resume updates
+        let isVisible = true;
+        let intervals = [];
+        
+        document.addEventListener('visibilitychange', () => {
+            isVisible = !document.hidden;
+            if (isVisible) {
+                // Refresh data when tab becomes visible
+                loadSystemMetrics();
+            }
+        });
+
+        // Smart interval manager
+        function createSmartInterval(callback, interval) {
+            const id = setInterval(() => {
+                if (isVisible) {
+                    callback();
+                }
+            }, interval);
+            intervals.push(id);
+            return id;
+        }
+
+        // Clear all intervals on page unload
+        window.addEventListener('beforeunload', () => {
+            intervals.forEach(clearInterval);
+        });
+
+        let allProjects = [];
+        let currentFilter = 'all';
+        let currentSort = 'name';
+        let currentProjectId = null;
+        let draggedProject = null;
+        let userEditors = [];
+        let translations = {};
+        let currentLang = 'ru';
+        
+        // Load user settings and editors
+        async function loadUserSettings() {
+            try {
+                // Try cache first
+                const cachedSettings = cache.persistent.get('user_settings');
+                if (cachedSettings) {
+                    applyCachedSettings(cachedSettings);
+                }
+                
+                // Load fresh settings in background
+                const settingsRes = await fetch('/api/settings');
+                const settingsData = await settingsRes.json();
+                cache.persistent.set('user_settings', settingsData, 3600000); // 1 hour TTL
+                
+                applyCachedSettings(settingsData);
+                
+                // Load editors
+                const cachedEditors = cache.persistent.get('editors');
+                if (cachedEditors) {
+                    userEditors = cachedEditors.filter(e => e.is_enabled);
+                }
+                
+                const editorsRes = await fetch('/api/settings/editors');
+                const editorsData = await editorsRes.json();
+                cache.persistent.set('editors', editorsData.editors, 3600000);
+                userEditors = editorsData.editors.filter(e => e.is_enabled);
+            } catch (e) {
+                console.error('Failed to load user settings:', e);
+                // Fallback to defaults
+                if (userEditors.length === 0) {
+                    userEditors = [
+                        { editor_id: 'windsurf', name: 'Windsurf', color: '#10b981', icon_path: '/static/icons/windsurf.png' },
+                        { editor_id: 'antigravity', name: 'Antigravity', color: '#8b5cf6', icon_path: '/static/icons/antigravity.png' }
+                    ];
+                }
+            }
+        }
+        
+        function applyCachedSettings(settingsData) {
+            if (settingsData.settings.language) {
+                currentLang = settingsData.settings.language.value;
+                loadTranslations();
+            }
+            
+            if (settingsData.settings.theme) {
+                applyTheme(settingsData.settings.theme.value);
+            }
+        }
+        
+        function applyTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+        }
+        
+        async function loadTranslations() {
+            try {
+                // Check cache first
+                const cached = cache.persistent.get(`translations_${currentLang}`);
+                if (cached) {
+                    translations = cached;
+                    applyTranslations();
+                }
+                
+                const res = await fetch(`/api/settings/i18n/${currentLang}`);
+                const data = await res.json();
+                translations = data.translations;
+                cache.persistent.set(`translations_${currentLang}`, translations, 86400000); // 24 hours
+                applyTranslations();
+            } catch (e) {
+                console.error('Failed to load translations:', e);
+            }
+        }
+        
+        function applyTranslations() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (translations[key]) {
+                    el.textContent = translations[key];
+                }
+            });
+            // Handle placeholders
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                const key = el.getAttribute('data-i18n-placeholder');
+                if (translations[key]) {
+                    el.placeholder = translations[key];
+                }
+            });
+        }
+        
+        // Translation helper function
+        function t(key) {
+            return translations[key] || key;
+        }
+        
+        // Load system metrics with caching - different intervals for each metric type
+        let lastMetricsLoad = { cpu: 0, ram: 0, disk: 0 };
+        const METRICS_INTERVALS = { cpu: 5000, ram: 10000, disk: 60000 }; // 5s, 10s, 60s
+        
+        async function loadSystemMetrics(force = false) {
+            const now = Date.now();
+            
+            // Check if we need to update each metric type
+            const shouldUpdate = {
+                cpu: force || (now - lastMetricsLoad.cpu > METRICS_INTERVALS.cpu),
+                ram: force || (now - lastMetricsLoad.ram > METRICS_INTERVALS.ram),
+                disk: force || (now - lastMetricsLoad.disk > METRICS_INTERVALS.disk)
+            };
+            
+            if (!shouldUpdate.cpu && !shouldUpdate.ram && !shouldUpdate.disk) {
+                return; // Skip if all metrics are fresh
+            }
+            
+            try {
+                // Use cached data if available and fresh
+                const cached = cache.persistent.get('system_metrics');
+                if (cached && !force) {
+                    const { data, timestamp } = cached;
+                    const age = now - timestamp;
+                    
+                    // Apply cached values that are still fresh
+                    if (shouldUpdate.cpu && age < METRICS_INTERVALS.cpu) {
+                        updateCPUDisplay(data.cpu);
+                        shouldUpdate.cpu = false;
+                    }
+                    if (shouldUpdate.ram && age < METRICS_INTERVALS.ram) {
+                        updateRAMDisplay(data.ram);
+                        shouldUpdate.ram = false;
+                    }
+                    if (shouldUpdate.disk && age < METRICS_INTERVALS.disk) {
+                        updateDiskDisplay(data.disk);
+                        shouldUpdate.disk = false;
+                    }
+                    if (!shouldUpdate.cpu && !shouldUpdate.ram && !shouldUpdate.disk) {
+                        return; // All metrics updated from cache
+                    }
+                }
+                
+                const res = await fetch('/api/system');
+                const data = await res.json();
+                
+                // Cache the result
+                cache.persistent.set('system_metrics', { data, timestamp: now }, 60000);
+                
+                // Update displays
+                if (shouldUpdate.cpu) {
+                    updateCPUDisplay(data.cpu);
+                    lastMetricsLoad.cpu = now;
+                }
+                if (shouldUpdate.ram) {
+                    updateRAMDisplay(data.ram);
+                    lastMetricsLoad.ram = now;
+                }
+                if (shouldUpdate.disk) {
+                    updateDiskDisplay(data.disk);
+                    lastMetricsLoad.disk = now;
+                }
+                
+                document.getElementById('uptime-metric').textContent = data.uptime.formatted;
+            } catch (e) {
+                console.error('Failed to load system metrics:', e);
+            }
+        }
+        
+        function updateCPUDisplay(cpu) {
+            document.getElementById('cpu-metric').textContent = cpu.percent + '%';
+            document.getElementById('cpu-metric').className = 'metric-value ' + cpu.status;
+        }
+        
+        function updateRAMDisplay(ram) {
+            document.getElementById('ram-metric').textContent = ram.used_mb + '/' + ram.total_mb + 'MB';
+            document.getElementById('ram-metric').className = 'metric-value ' + ram.status;
+        }
+        
+        function updateDiskDisplay(disk) {
+            document.getElementById('disk-metric').textContent = disk.percent + '%';
+            document.getElementById('disk-metric').className = 'metric-value ' + disk.status;
+        }
+        
+        function setSort(sort) {
+            currentSort = sort;
+            document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector('.sort-btn[data-sort="' + sort + '"]').classList.add('active');
+            loadProjects();
+        }
+        
+        async function loadStats() {
+            try {
+                const res = await fetch('/api/stats');
+                const data = await res.json();
+                document.getElementById('total-count').textContent = data.total;
+                document.getElementById('active-count').textContent = data.active;
+            } catch (e) {
+                console.error('Failed to load stats:', e);
+            }
+        }
+        
+        // Load projects with session caching
+        async function loadProjects(force = false) {
+            try {
+                // Try session cache first
+                if (!force) {
+                    const cached = cache.session.get('projects');
+                    if (cached) {
+                        allProjects = cached;
+                        renderProjects();
+                    }
+                }
+                
+                const res = await fetch('/api/projects?sort=' + currentSort);
+                const data = await res.json();
+                allProjects = data.projects;
+                cache.session.set('projects', allProjects);
+                renderProjects();
+            } catch (e) {
+                // Try to use cached data on error
+                const cached = cache.session.get('projects');
+                if (cached) {
+                    allProjects = cached;
+                    renderProjects();
+                } else {
+                    document.getElementById('projects').innerHTML = 
+                        '<div class="empty">Ошибка загрузки проектов</div>';
+                }
+            }
+        }
+        
+        function getLabelBadge(label) {
+            if (!label) return '';
+            const icons = {
+                'favorite': '★',
+                'working': '▶',
+                'archive': '◼'
+            };
+            return `<span class="project-label label-${label}">${icons[label] || ''}</span>`;
+        }
+        
+        function getTypeIcon(type) {
+            const icons = {
+                // JavaScript / TypeScript ecosystem
+                'nodejs': '🟢 Node.js',
+                'typescript': '🔷 TypeScript',
+                'react': '⚛️ React',
+                'nextjs': '▲ Next.js',
+                'vue': '🟢 Vue',
+                'angular': '🅰️ Angular',
+                'svelte': '🔥 Svelte',
+                'express': '🚂 Express',
+                'nestjs': '🦅 NestJS',
+                'astro': '🚀 Astro',
+                'vite': '⚡ Vite',
+                'webpack': '📦 Webpack',
+                'rollup': '📜 Rollup',
+                'parcel': '📮 Parcel',
+                'electron': '⚡ Electron',
+                
+                // Python ecosystem
+                'python': '🐍 Python',
+                'django': '🐎 Django',
+                'flask': '🌶️ Flask',
+                'fastapi': '⚡ FastAPI',
+                
+                // Java ecosystem
+                'java': '☕ Java',
+                'maven': '📦 Maven',
+                'gradle': '🐘 Gradle',
+                'kotlin': '🇰 Kotlin',
+                'scala': '🔴 Scala',
+                
+                // Ruby ecosystem
+                'ruby': '💎 Ruby',
+                'ruby-gem': '� Ruby Gem',
+                
+                // PHP ecosystem
+                'php': '🐘 PHP',
+                'laravel': '🟠 Laravel',
+                'symfony': '🎵 Symfony',
+                
+                // Systems languages
+                'rust': '🦀 Rust',
+                'go': '🔵 Go',
+                'cpp': '🔵 C++',
+                'c': '🔵 C',
+                'cmake': '🔧 CMake',
+                'make': '🛠️ Make',
+                'qt': '🔷 Qt',
+                
+                // Functional languages
+                'haskell': '📊 Haskell',
+                'elixir': '💧 Elixir',
+                'clojure': '🔮 Clojure',
+                'ocaml': '🐫 OCaml',
+                
+                // .NET ecosystem
+                'csharp': '🔷 C#',
+                'dotnet': '💜 .NET',
+                
+                // Mobile development
+                'swift': '🔶 Swift',
+                'cocoapods': '📱 CocoaPods',
+                'android': '🤖 Android',
+                'flutter': '💙 Flutter',
+                'dart': '🎯 Dart',
+                'capacitor': '⚡ Capacitor',
+                'tauri': '🦀 Tauri',
+                'react-native': '📱 React Native',
+                
+                // Game development
+                'unity': '🎮 Unity',
+                'unreal': '🎮 Unreal',
+                'godot': '🎮 Godot',
+                'love2d': '💕 Love2D',
+                'pico8': '🕹️ PICO-8',
+                
+                // Infrastructure / DevOps
+                'docker': '🐳 Docker',
+                'terraform': '🌍 Terraform',
+                'ansible': '📋 Ansible',
+                'k8s': '☸️ Kubernetes',
+                'bash': '💻 Bash',
+                
+                // Static site generators
+                'hugo': '🤠 Hugo',
+                'jekyll': '💎 Jekyll',
+                
+                // Other languages
+                'lua': '🌙 Lua',
+                'nim': '👑 Nim',
+                'zig': '⚡ Zig',
+                'crystal': '💎 Crystal',
+                'r': '📊 R',
+                'julia': '🔴 Julia',
+                
+                // Configs / General
+                'unknown': '⚪ Unknown'
+            };
+            return icons[type] || '⚪ ' + (type || 'Unknown');
+        }
+        
+        // Drag and Drop handlers
+        function handleDragStart(e) {
+            e.stopPropagation(); // Важно!
+            draggedProject = parseInt(e.target.dataset.id);
+            e.target.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', draggedProject);
+        }
+        
+        function handleDragEnd(e) {
+            e.target.classList.remove('dragging');
+            document.querySelectorAll('.project-card').forEach(card => {
+                card.classList.remove('drag-over');
+            });
+            draggedProject = null;
+        }
+        
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const card = e.target.closest('.project-card');
+            if (card && card.dataset.id != draggedProject) {
+                card.classList.add('drag-over');
+            }
+        }
+        
+        function handleDragLeave(e) {
+            const card = e.target.closest('.project-card');
+            if (card) {
+                card.classList.remove('drag-over');
+            }
+        }
+        
+        async function handleDrop(e) {
+            e.preventDefault();
+            const card = e.target.closest('.project-card');
+            if (!card || !draggedProject) return;
+            
+            const targetId = parseInt(card.dataset.id);
+            if (targetId === draggedProject) return;
+            
+            card.classList.remove('drag-over');
+            
+            // Find indices
+            const draggedIndex = allProjects.findIndex(p => p.id === draggedProject);
+            const targetIndex = allProjects.findIndex(p => p.id === targetId);
+            
+            if (draggedIndex === -1 || targetIndex === -1) return;
+            
+            // Reorder array
+            const [movedProject] = allProjects.splice(draggedIndex, 1);
+            allProjects.splice(targetIndex, 0, movedProject);
+            
+            // Update sort_order for all projects
+            const projectIds = allProjects.map(p => p.id);
+            
+            try {
+                await fetch('/api/projects/reorder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ project_ids: projectIds })
+                });
+                renderProjects();
+            } catch (err) {
+                console.error('Failed to reorder:', err);
+                loadProjects(); // Reload on error
+            }
+        }
+        
+        function renderProjects() {
+            const container = document.getElementById('projects');
+            const searchTerm = document.getElementById('search').value.toLowerCase();
+            
+            let filtered = allProjects;
+            
+            if (currentFilter !== 'all') {
+                filtered = filtered.filter(p => p.category === currentFilter);
+            }
+            
+            if (searchTerm) {
+                filtered = filtered.filter(p => 
+                    p.name.toLowerCase().includes(searchTerm) ||
+                    p.display_name.toLowerCase().includes(searchTerm)
+                );
+            }
+            
+            if (filtered.length === 0) {
+                container.innerHTML = `<div class="empty" data-i18n="projects.empty">Нет проектов</div>`;
+                return;
+            }
+            
+            // Show hint for custom sort mode (on all tabs)
+            const showControls = currentSort === 'custom' && !searchTerm;
+            
+            // Generate editor buttons HTML
+            const editorButtonsHtml = userEditors.map(editor => {
+                const iconHtml = editor.icon_path 
+                    ? `<img src="${editor.icon_path}" width="22" height="22" style="object-fit: contain;">`
+                    : `<i data-lucide="code" style="width:18px;height:18px;"></i>`;
+                return `
+                    <button class="action-btn" onclick="launchProject(${editor.editor_id})" title="${editor.name}" style="background: ${editor.color};">
+                        ${iconHtml}
+                    </button>
+                `;
+            }).join('');
+            
+            let html = '';
+            
+            if (showControls) {
+                html += `<div class="move-hint">🔄 <strong>Режим порядка:</strong> Кнопки ⤴↑↓⤵ перемещают проект. Подсветка покажет куда.</div>`;
+            }
+            
+            html += filtered.map((p, index) => {
+                const moveButtons = showControls ? `
+                    <div class="move-controls">
+                        <button class="move-btn" onclick="moveProject(${p.id}, 'top'); event.stopPropagation();" title="На верх">⤴</button>
+                        <button class="move-btn" onclick="moveProject(${p.id}, 'up'); event.stopPropagation();" title="Вверх">↑</button>
+                        <button class="move-btn" onclick="moveProject(${p.id}, 'down'); event.stopPropagation();" title="Вниз">↓</button>
+                        <button class="move-btn" onclick="moveProject(${p.id}, 'bottom'); event.stopPropagation();" title="Вниз">⤵</button>
+                    </div>
+                ` : '';
+                
+                // Generate dynamic editor buttons for each project
+                const projectEditorButtons = userEditors.map(editor => {
+                    const iconHtml = editor.icon_path 
+                        ? `<img src="${editor.icon_path}" width="22" height="22" style="object-fit: contain;">`
+                        : `<i data-lucide="code" style="width:18px;height:18px;"></i>`;
+                    return `
+                        <button class="action-btn" onclick="launchProject(${p.id}, '${editor.editor_id}'); event.stopPropagation();" title="${editor.name}" style="background: ${editor.color};">
+                            ${iconHtml}
+                        </button>
+                    `;
+                }).join('');
+                
+                return `
+                <div class="project-card category-${p.category}" id="project-${p.id}"
+                     data-id="${p.id}" 
+                     onclick="openProjectDetail(${p.id})">
+                    <div class="project-header">
+                        <div class="project-name">${getLabelBadge(p.label)}${p.display_name}</div>
+                        ${moveButtons}
+                        <div class="project-category">${p.category}</div>
+                    </div>
+                    <div class="project-path">${p.path}</div>
+                    <div class="project-tags">
+                        ${(p.tags || []).map(t => `<span class="tag">${t}</span>`).join('')}
+                    </div>
+                    <div class="project-meta">
+                        <span>${getTypeIcon(p.project_type)}</span>
+                        ${p.open_count > 0 ? `<span>👁 ${p.open_count}</span>` : ''}
+                    </div>
+                    <div class="actions" onclick="event.stopPropagation()">
+                        <button class="action-btn folder" onclick="openProjectFolder(${p.id})" title="Открыть папку">
+                            <i data-lucide="folder-open" style="width:18px;height:18px;"></i>
+                        </button>
+                        ${projectEditorButtons}
+                    </div>
+                </div>
+            `}).join('');
+            
+            container.innerHTML = html;
+            lucide.createIcons();
+        }
+        
+        async function openProjectFolder(id) {
+            try {
+                await fetch(`/api/projects/${id}/open-folder`, { method: 'POST' });
+            } catch (e) {
+                console.error('Failed to open folder:', e);
+            }
+        }
+        
+        async function launchProject(id, editor) {
+            try {
+                await fetch(`/api/projects/${id}/launch?editor=${editor}`, { method: 'POST' });
+            } catch (e) {
+                console.error('Failed to launch:', e);
+            }
+        }
+        
+        async function setProjectLabel(id, label) {
+            try {
+                const response = await fetch(`/api/projects/${id}/label?label=${label}`, { 
+                    method: 'POST' 
+                });
+                if (response.ok) {
+                    openProjectDetail(id);
+                    loadProjects();
+                }
+            } catch (e) {
+                console.error('Failed to set label:', e);
+            }
+        }
+        
+        async function moveProject(id, direction) {
+            // Подсветка карточки перед перемещением
+            const card = document.getElementById(`project-${id}`);
+            if (card) {
+                card.classList.add('moving');
+                setTimeout(() => card.classList.remove('moving'), 1000);
+            }
+            
+            try {
+                const response = await fetch(`/api/projects/${id}/move?direction=${direction}`, {
+                    method: 'POST'
+                });
+                if (response.ok) {
+                    loadProjects();
+                }
+            } catch (e) {
+                console.error('Failed to move:', e);
+            }
+        }
+        
+        // Git status cache - stores git info per project for 30 seconds
+        const gitCache = {
+            get(projectId) {
+                return cache.persistent.get(`git_${projectId}`);
+            },
+            set(projectId, data) {
+                cache.persistent.set(`git_${projectId}`, data, 30000);
+            }
+        };
+        
+        async function loadGitStatus(projectId) {
+            const cached = gitCache.get(projectId);
+            if (cached) return cached;
+            
+            try {
+                const res = await fetch(`/api/projects/${projectId}/git`);
+                const data = await res.json();
+                gitCache.set(projectId, data);
+                return data;
+            } catch (e) {
+                return { is_git: false };
+            }
+        }
+        
+        async function openProjectDetail(id) {
+            currentProjectId = id;
+            const modal = document.getElementById('modal');
+            const body = document.getElementById('modal-body');
+            const title = document.getElementById('modal-title');
+            
+            modal.classList.add('active');
+            body.innerHTML = '<div class="loading">' + (t('projects.loading') || 'Загрузка...') + '</div>';
+            
+            // Generate dynamic editor buttons for modal
+            const modalEditorButtons = (userEditors || []).map(editor => {
+                const iconHtml = editor.icon_path 
+                    ? `<img src="${editor.icon_path}" width="22" height="22" style="object-fit: contain;">`
+                    : `<i data-lucide="code" style="width:18px;height:18px;"></i>`;
+                return `
+                    <button class="action-btn" onclick="launchProject(${id}, '${editor.editor_id}')" title="${editor.name}" style="background: ${editor.color};">
+                        ${iconHtml}
+                    </button>
+                `;
+            }).join('');
+            
+            try {
+                // Load project details
+                const projectRes = await fetch(`/api/projects/${id}`);
+                if (!projectRes.ok) throw new Error('Failed to load project');
+                const project = await projectRes.json();
+                
+                // Load git and docker in parallel (non-blocking)
+                let git = { is_git: false };
+                let docker = { containers: [] };
+                
+                try {
+                    git = await loadGitStatus(id);
+                } catch (e) {
+                    console.log('Git load failed (non-critical):', e);
+                }
+                
+                try {
+                    const dockerRes = await fetch(`/api/projects/${id}/docker`);
+                    if (dockerRes.ok) docker = await dockerRes.json();
+                } catch (e) {
+                    console.log('Docker load failed (non-critical):', e);
+                }
+                
+                title.textContent = project.display_name || project.name;
+                
+                // Helper for safe translation
+                const tr = (key, fallback) => t(key) || fallback;
+                
+                body.innerHTML = `
+                    <div class="section">
+                        <h4>📋 ${tr('modal.info', 'Информация')}</h4>
+                        <p><strong>${tr('modal.path', 'Путь')}:</strong> ${project.path || '-'}</p>
+                        <p><strong>${tr('modal.type', 'Тип')}:</strong> ${getTypeIcon(project.project_type)}</p>
+                        <p><strong>${tr('modal.status', 'Статус')}:</strong> <span class="status-badge status-${project.status}">${project.status}</span></p>
+                        ${project.label ? `<p><strong>${tr('modal.label', 'Лейбл')}:</strong> ${getLabelBadge(project.label)} ${project.label}</p>` : ''}
+                    </div>
+                    
+                    <div class="section">
+                        <h4>🏷️ ${tr('modal.labels', 'Лейблы')}</h4>
+                        <div class="label-selector">
+                            <button class="label-btn ${project.label === 'favorite' ? 'active label-favorite' : ''}" onclick="setProjectLabel(${project.id}, 'favorite')">
+                                ★ ${tr('modal.labels_favorite', 'Избранное')}
+                            </button>
+                            <button class="label-btn ${project.label === 'working' ? 'active label-working' : ''}" onclick="setProjectLabel(${project.id}, 'working')">
+                                ▶ ${tr('modal.labels_working', 'В работе')}
+                            </button>
+                            <button class="label-btn ${project.label === 'archive' ? 'active label-archive' : ''}" onclick="setProjectLabel(${project.id}, 'archive')">
+                                ◼ ${tr('modal.labels_archive', 'Архив')}
+                            </button>
+                            <button class="label-btn ${project.label ? '' : 'active'}" onclick="setProjectLabel(${project.id}, '')">
+                                ✕ ${tr('modal.labels_none', 'Нет')}
+                            </button>
+                        </div>
+                    </div>
+                    
+                    ${git.is_git ? `
+                    <div class="section">
+                        <h4>🌿 ${tr('modal.git', 'Git')}</h4>
+                        <p><strong>${tr('modal.git_branch', 'Ветка')}:</strong> ${git.branch || '-'}</p>
+                        <p><strong>${tr('modal.git_changes', 'Изменений')}:</strong> ${git.changes || 0}</p>
+                        <p><strong>${tr('modal.git_last_commit', 'Последний коммит')}:</strong> ${git.last_commit || '-'}</p>
+                    </div>
+                    ` : ''}
+                    
+                    ${docker.containers && docker.containers.length > 0 ? `
+                    <div class="section">
+                        <h4>🐳 ${tr('modal.docker', 'Docker')}</h4>
+                        ${docker.containers.map(c => `
+                            <p>${c.name} - ${c.status}</p>
+                        `).join('')}
+                    </div>
+                    ` : ''}
+                    
+                    <div class="section">
+                        <h4>📝 ${tr('modal.notes', 'Заметки')}</h4>
+                        <div class="notes-list" id="notes-list">
+                            ${(project.notes || []).map(n => `
+                                <div class="note-item">
+                                    ${n.content}
+                                    <div class="note-date">${new Date(n.created_at).toLocaleString()}</div>
+                                </div>
+                            `).join('') || `<p style="color: #6e7681;">${tr('modal.notes_empty', 'Нет заметок')}</p>`}
+                        </div>
+                        <div class="add-note">
+                            <input type="text" class="note-input" id="note-input" placeholder="${tr('modal.notes_placeholder', 'Добавить заметку...')}">
+                            <button class="btn btn-primary" onclick="addNote()">${tr('modal.notes_add', 'Добавить')}</button>
+                        </div>
+                    </div>
+                    
+                    <div class="section">
+                        <h4>⚡ ${tr('modal.quick_actions', 'Быстрые действия')}</h4>
+                        <div class="actions">
+                            <button class="action-btn folder" onclick="openProjectFolder(${id})" title="${tr('projects.open_folder', 'Открыть папку')}">
+                                <i data-lucide="folder-open" style="width:18px;height:18px;"></i>
+                            </button>
+                            ${modalEditorButtons}
+                        </div>
+                    </div>
+                `;
+                lucide.createIcons();
+            } catch (e) {
+                console.error('Modal load error:', e);
+                body.innerHTML = `<div class="empty">${t('projects.loading_error') || 'Ошибка загрузки'}: ${e.message}</div>`;
+            }
+        }
+        
+        function closeModal() {
+            document.getElementById('modal').classList.remove('active');
+            currentProjectId = null;
+        }
+        
+        async function addNote() {
+            const input = document.getElementById('note-input');
+            const content = input.value.trim();
+            if (!content || !currentProjectId) return;
+            
+            try {
+                await fetch(`/api/projects/${currentProjectId}/notes`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ project_id: currentProjectId, content })
+                });
+                input.value = '';
+                openProjectDetail(currentProjectId);
+            } catch (e) {
+                console.error('Failed to add note:', e);
+            }
+        }
+        
+        async function syncProjects() {
+            await loadStats();
+            await loadSystemMetrics();
+            await loadProjects();
+        }
+        
+        // Filter buttons
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentFilter = btn.dataset.filter;
+                renderProjects();
+            });
+        });
+        
+        // Debounced search - only searches 300ms after user stops typing
+        const debouncedSearch = debounce(() => {
+            renderProjects();
+        }, 300);
+        
+        document.getElementById('search').addEventListener('input', debouncedSearch);
+        
+        // Close modal on overlay click
+        document.getElementById('modal').addEventListener('click', (e) => {
+            if (e.target.id === 'modal') closeModal();
+        });
+        
+        // Load on start
+        async function init() {
+            await loadUserSettings();
+            loadSystemMetrics();
+            loadStats();
+            loadProjects();
+        }
+        
+        init();
+        
+        // Smart intervals - pause when tab is not visible
+        // CPU: 5s, RAM: 10s, others: 30s
+        createSmartInterval(() => loadSystemMetrics(), 5000);
+        createSmartInterval(() => loadStats(), 30000);
+        
+        // Initialize Lucide icons
+        lucide.createIcons();
+    </script>
+</body>
+</html>
