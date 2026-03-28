@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProjectHub - Настройки</title>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-card: #21262d;
+            --bg-hover: #30363d;
+            --border-color: #30363d;
+            --text-primary: #f0f6fc;
+            --text-secondary: #8b949e;
+            --text-muted: #6e7681;
+            --accent-blue: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-orange: #f78166;
+            --accent-purple: #a371f7;
+            --danger: #f85149;
+        }
+        
+        /* GitHub Light Theme */
+        [data-theme="github-light"] {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f6f8fa;
+            --bg-card: #ffffff;
+            --bg-hover: #f3f4f6;
+            --border-color: #d0d7de;
+            --text-primary: #1f2328;
+            --text-secondary: #656d76;
+            --text-muted: #8c959f;
+            --accent-blue: #0969da;
+            --accent-green: #1a7f37;
+            --accent-orange: #cf5129;
+            --accent-purple: #8250df;
+            --danger: #cf222e;
+        }
+        
+        /* Midnight OLED Theme */
+        [data-theme="midnight"] {
+            --bg-primary: #000000;
+            --bg-secondary: #0a0a0a;
+            --bg-card: #111111;
+            --bg-hover: #1a1a1a;
+            --border-color: #222222;
+            --text-primary: #e6e6e6;
+            --text-secondary: #888888;
+            --text-muted: #555555;
+            --accent-blue: #4da6ff;
+            --accent-green: #4ae168;
+            --accent-orange: #ff8a5c;
+            --accent-purple: #c084fc;
+            --danger: #ff5555;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+        
+        .header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .header h1 { 
+            font-size: 18px; 
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .header h1 a {
+            color: var(--text-primary);
+            text-decoration: none;
+        }
+        
+        .header h1 i {
+            color: var(--accent-blue);
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px;
+            display: grid;
+            grid-template-columns: 260px 1fr;
+            gap: 24px;
+        }
+        
+        .sidebar {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            height: fit-content;
+        }
+        
+        .sidebar h3 {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .nav-item {
+            width: 100%;
+            padding: 10px 12px;
+            background: transparent;
+            border: none;
+            border-radius: 6px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 14px;
+            text-align: left;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.15s;
+            margin-bottom: 2px;
+        }
+        
+        .nav-item:hover { 
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+        
+        .nav-item.active { 
+            background: var(--accent-blue);
+            color: #fff;
+        }
+        
+        .nav-item i {
+            width: 18px;
+            height: 18px;
+        }
+        
+        .main-content {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 24px;
+        }
+        
+        .section-title {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .section-description {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 24px;
+        }
+        
+        .settings-group {
+            margin-bottom: 24px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .settings-group:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        
+        .setting-label {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: block;
+        }
+        
+        .setting-description {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+        
+        select, input[type="text"], input[type="number"] {
+            width: 100%;
+            max-width: 300px;
+            padding: 8px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        
+        select:focus, input:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s;
+        }
+        
+        .btn:hover { 
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+        
+        .btn-primary { 
+            background: var(--accent-green);
+            border-color: var(--accent-green);
+            color: #fff;
+        }
+        
+        .btn-primary:hover { 
+            background: #2ea043;
+            border-color: #2ea043;
+        }
+        
+        .btn-danger {
+            background: var(--danger);
+            border-color: var(--danger);
+            color: #fff;
+        }
+        
+        .btn-danger:hover {
+            background: #da3633;
+            border-color: #da3633;
+        }
+        
+        .btn-small {
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+        
+        .editors-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .editor-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            cursor: grab;
+        }
+        
+        .editor-item.dragging {
+            opacity: 0.5;
+        }
+        
+        .editor-drag-handle {
+            color: var(--text-muted);
+            cursor: grab;
+        }
+        
+        .editor-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 12px;
+            color: #fff;
+        }
+        
+        .editor-info {
+            flex: 1;
+        }
+        
+        .editor-name {
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        .editor-command {
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-family: ui-monospace, SFMono-Regular, monospace;
+        }
+        
+        .editor-badges {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .badge {
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 500;
+        }
+        
+        .badge-default {
+            background: var(--accent-blue);
+            color: #fff;
+        }
+        
+        .badge-disabled {
+            background: var(--text-muted);
+            color: var(--bg-primary);
+        }
+        
+        .editor-actions {
+            display: flex;
+            gap: 8px;
+        }
+        
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+        }
+        
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--bg-hover);
+            transition: .3s;
+            border-radius: 24px;
+        }
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .toggle-slider {
+            background-color: var(--accent-green);
+        }
+        
+        input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
+        
+        .form-group {
+            margin-bottom: 16px;
+        }
+        
+        .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+        
+        .form-input {
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 14px;
+        }
+        
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .modal-overlay.active { display: flex; }
+        
+        .modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow: hidden;
+        }
+        
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .modal-title { font-size: 18px; font-weight: 600; }
+        
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 24px;
+            cursor: pointer;
+        }
+        
+        .modal-body {
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .modal-footer {
+            padding: 16px 20px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+        
+        .color-picker {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .color-option {
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.15s;
+        }
+        
+        .color-option:hover {
+            transform: scale(1.1);
+        }
+        
+        .color-option.selected {
+            border-color: var(--text-primary);
+        }
+        
+        .hidden { display: none !important; }
+        
+        .success-toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: var(--accent-green);
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            z-index: 2000;
+        }
+        
+        .success-toast.active { display: flex; }
+        
+        .test-result {
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+        
+        .test-result.success {
+            background: rgba(63, 185, 80, 0.1);
+            border: 1px solid var(--accent-green);
+            color: var(--accent-green);
+        }
+        
+        .test-result.error {
+            background: rgba(248, 81, 73, 0.1);
+            border: 1px solid var(--danger);
+            color: var(--danger);
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>
+            <a href="/">
+                <i data-lucide="folder-open"></i>
+                ProjectHub
+            </a>
+        </h1>
+        <div style="display: flex; gap: 12px;">
+            <button class="btn" onclick="window.location.href='/'">
+                <i data-lucide="arrow-left" style="width:16px;height:16px;"></i>
+                <span data-i18n="navigation.dashboard">Дашборд</span>
+            </button>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="sidebar">
+            <h3 data-i18n="settings.title">Настройки</h3>
+            <button class="nav-item active" data-section="general" onclick="showSection('general')">
+                <i data-lucide="settings"></i>
+                <span data-i18n="settings.sections.general">Общие</span>
+            </button>
+            <button class="nav-item" data-section="appearance" onclick="showSection('appearance')">
+                <i data-lucide="palette"></i>
+                <span data-i18n="settings.sections.appearance">Внешний вид</span>
+            </button>
+            <button class="nav-item" data-section="editors" onclick="showSection('editors')">
+                <i data-lucide="code"></i>
+                <span data-i18n="settings.sections.editors">Редакторы</span>
+            </button>
+        </div>
+        
+        <div class="main-content">
+            <!-- General Section -->
+            <div id="section-general" class="settings-section">
+                <h2 class="section-title" data-i18n="settings.sections.general">Общие</h2>
+                <p class="section-description" data-i18n="settings.sections.general_description">Основные настройки приложения</p>
+                
+                <div class="settings-group">
+                    <label class="setting-label" data-i18n="settings.language.title">Язык интерфейса</label>
+                    <p class="setting-description" data-i18n="settings.language.description">Выберите предпочитаемый язык интерфейса</p>
+                    <select id="language-select" onchange="saveSetting('language', this.value)">
+                        <option value="ru">🇷🇺 Русский</option>
+                        <option value="en">🇬🇧 English</option>
+                        <option value="zh">🇨🇳 中文</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Appearance Section -->
+            <div id="section-appearance" class="settings-section hidden">
+                <h2 class="section-title" data-i18n="settings.sections.appearance">Внешний вид</h2>
+                <p class="section-description" data-i18n="settings.theme.description">Настройка темы и визуального оформления</p>
+                
+                <div class="settings-group">
+                    <label class="setting-label" data-i18n="settings.theme.title">Тема оформления</label>
+                    <p class="setting-description" data-i18n="settings.theme.description">Выберите цветовую схему интерфейса</p>
+                    <select id="theme-select" onchange="saveSetting('theme', this.value)">
+                        <option value="github-dark">GitHub Dark</option>
+                        <option value="github-light">GitHub Light</option>
+                        <option value="midnight">Midnight OLED</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Editors Section -->
+            <div id="section-editors" class="settings-section hidden">
+                <h2 class="section-title" data-i18n="settings.editors.title">Редакторы кода</h2>
+                <p class="section-description" data-i18n="settings.editors.description">Настройте IDE и редакторы для открытия проектов</p>
+                
+                <div class="settings-group">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <label class="setting-label" data-i18n="settings.editors.configured">Настроенные редакторы</label>
+                        <button class="btn btn-primary" onclick="openAddEditorModal()">
+                            <i data-lucide="plus" style="width:16px;height:16px;"></i>
+                            <span data-i18n="settings.editors.add">Добавить</span>
+                        </button>
+                    </div>
+                    <div class="editors-list" id="editors-list">
+                        <!-- Editors will be loaded here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Add/Edit Editor Modal -->
+    <div class="modal-overlay" id="editor-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title" id="modal-title">Добавить редактор</div>
+                <button class="modal-close" onclick="closeEditorModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" data-i18n="settings.editors.name">Название</label>
+                    <input type="text" class="form-input" id="editor-name" data-i18n-placeholder="settings.editors.name_placeholder" placeholder="Например: VS Code">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="settings.editors.command">Команда</label>
+                    <input type="text" class="form-input" id="editor-command" data-i18n-placeholder="settings.editors.command_placeholder" placeholder="Например: code">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="settings.editors.args">Аргументы</label>
+                    <input type="text" class="form-input" id="editor-args" value="{path}" placeholder="{path}">
+                    <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;" data-i18n="settings.editors.args_help">
+                        Используйте <code>{path}</code> для подстановки пути к проекту
+                    </p>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" data-i18n="settings.editors.color">Цвет кнопки</label>
+                    <div class="color-picker" id="color-picker">
+                        <div class="color-option selected" style="background: #1f6feb;" data-color="#1f6feb"></div>
+                        <div class="color-option" style="background: #10b981;" data-color="#10b981"></div>
+                        <div class="color-option" style="background: #f78166;" data-color="#f78166"></div>
+                        <div class="color-option" style="background: #a371f7;" data-color="#a371f7"></div>
+                        <div class="color-option" style="background: #0078d4;" data-color="#0078d4"></div>
+                        <div class="color-option" style="background: #f97316;" data-color="#f97316"></div>
+                        <div class="color-option" style="background: #6366f1;" data-color="#6366f1"></div>
+                        <div class="color-option" style="background: #d946ef;" data-color="#d946ef"></div>
+                    </div>
+                </div>
+                <div id="test-result" class="test-result hidden"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="testEditor()" id="test-btn">
+                    <i data-lucide="play" style="width:16px;height:16px;"></i>
+                    <span data-i18n="settings.editors.test">Тест</span>
+                </button>
+                <button class="btn" onclick="closeEditorModal()" data-i18n="actions.cancel">Отмена</button>
+                <button class="btn btn-primary" onclick="saveEditor()" data-i18n="actions.save">Сохранить</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="success-toast" id="toast">
+        <i data-lucide="check" style="width:18px;height:18px;"></i>
+        <span id="toast-message">Сохранено</span>
+    </div>
+    
+    <script>
+        let currentSection = 'general';
+        let editors = [];
+        let editingEditorId = null;
+        let selectedColor = '#1f6feb';
+        let translations = {};
+        let currentLang = 'ru';
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            lucide.createIcons();
+            await loadTranslations();
+            await loadSettings();
+            await loadEditors();
+        });
+        
+        // Navigation
+        function showSection(section) {
+            document.querySelectorAll('.settings-section').forEach(s => s.classList.add('hidden'));
+            document.getElementById(`section-${section}`).classList.remove('hidden');
+            
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.querySelector(`.nav-item[data-section="${section}"]`).classList.add('active');
+            
+            currentSection = section;
+        }
+        
+        // Translations
+        async function loadTranslations() {
+            try {
+                const res = await fetch(`/api/settings/i18n/${currentLang}`);
+                const data = await res.json();
+                translations = data.translations;
+                applyTranslations();
+            } catch (e) {
+                console.error('Failed to load translations:', e);
+            }
+        }
+        
+        function applyTranslations() {
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (translations[key]) {
+                    el.textContent = translations[key];
+                }
+            });
+            // Handle placeholders
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                const key = el.getAttribute('data-i18n-placeholder');
+                if (translations[key]) {
+                    el.placeholder = translations[key];
+                }
+            });
+        }
+        
+        function t(key) {
+            return translations[key] || key;
+        }
+        
+        // Settings
+        async function loadSettings() {
+            try {
+                const res = await fetch('/api/settings');
+                const data = await res.json();
+                const settings = data.settings;
+                
+                if (settings.language) {
+                    document.getElementById('language-select').value = settings.language.value;
+                    currentLang = settings.language.value;
+                    await loadTranslations();
+                }
+                
+                if (settings.theme) {
+                    document.getElementById('theme-select').value = settings.theme.value;
+                    applyTheme(settings.theme.value);
+                }
+            } catch (e) {
+                console.error('Failed to load settings:', e);
+            }
+        }
+        
+        async function saveSetting(key, value) {
+            try {
+                const settings = {};
+                settings[key] = { value: value, type: 'string', category: 'general' };
+                
+                await fetch('/api/settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settings)
+                });
+                
+                showToast(t('toast.saved'));
+                
+                if (key === 'language') {
+                    currentLang = value;
+                    await loadTranslations();
+                }
+                if (key === 'theme') {
+                    applyTheme(value);
+                }
+            } catch (e) {
+                console.error('Failed to save setting:', e);
+                showToast(t('toast.error_save'), true);
+            }
+        }
+        
+        function applyTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+        }
+        
+        // Editors
+        async function loadEditors() {
+            try {
+                const res = await fetch('/api/settings/editors');
+                const data = await res.json();
+                editors = data.editors;
+                renderEditors();
+            } catch (e) {
+                console.error('Failed to load editors:', e);
+            }
+        }
+        
+        function renderEditors() {
+            const container = document.getElementById('editors-list');
+            
+            if (editors.length === 0) {
+                container.innerHTML = `<p style="color: var(--text-muted);" data-i18n="settings.editors.empty">Нет настроенных редакторов</p>`;
+                return;
+            }
+            
+            container.innerHTML = editors.map((editor, index) => `
+                <div class="editor-item" draggable="true" data-editor-id="${editor.editor_id}" data-index="${index}">
+                    <div class="editor-drag-handle">
+                        <i data-lucide="grip-vertical" style="width:18px;height:18px;"></i>
+                    </div>
+                    <div class="editor-icon" style="background: ${editor.color}; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                        ${editor.icon_path 
+                            ? `<img src="${editor.icon_path}" width="28" height="28" style="object-fit: contain;">` 
+                            : editor.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div class="editor-info">
+                        <div class="editor-name">${editor.name} ${editor.is_default ? `<span class="badge badge-default">${t('settings.editors.default')}</span>` : ''} ${!editor.is_enabled ? `<span class="badge badge-disabled">${t('settings.editors.disabled') || 'Отключен'}</span>` : ''}</div>
+                        <div class="editor-command">${editor.command} ${editor.args_template}</div>
+                    </div>
+                    <div class="editor-actions">
+                        <label class="toggle-switch">
+                            <input type="checkbox" ${editor.is_enabled ? 'checked' : ''} onchange="toggleEditor('${editor.editor_id}', this.checked)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        ${!editor.is_default ? `<button class="btn btn-small" onclick="setDefaultEditor('${editor.editor_id}')" title="${t('settings.editors.default')}">★</button>` : ''}
+                        <button class="btn btn-small" onclick="openEditEditorModal('${editor.editor_id}')">
+                            <i data-lucide="edit" style="width:14px;height:14px;"></i>
+                        </button>
+                        <button class="btn btn-small btn-danger" onclick="deleteEditor('${editor.editor_id}')">
+                            <i data-lucide="trash" style="width:14px;height:14px;"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+            
+            lucide.createIcons();
+            initDragAndDrop();
+        }
+        
+        function initDragAndDrop() {
+            const items = document.querySelectorAll('.editor-item');
+            let draggedItem = null;
+            
+            items.forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    draggedItem = item;
+                    item.classList.add('dragging');
+                    e.dataTransfer.effectAllowed = 'move';
+                });
+                
+                item.addEventListener('dragend', () => {
+                    item.classList.remove('dragging');
+                    draggedItem = null;
+                });
+                
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    if (draggedItem && draggedItem !== item) {
+                        const container = document.getElementById('editors-list');
+                        const allItems = [...container.querySelectorAll('.editor-item')];
+                        const draggedIdx = allItems.indexOf(draggedItem);
+                        const targetIdx = allItems.indexOf(item);
+                        
+                        if (draggedIdx < targetIdx) {
+                            item.parentNode.insertBefore(draggedItem, item.nextSibling);
+                        } else {
+                            item.parentNode.insertBefore(draggedItem, item);
+                        }
+                    }
+                });
+            });
+        }
+        
+        async function saveEditorOrder() {
+            const container = document.getElementById('editors-list');
+            const items = container.querySelectorAll('.editor-item');
+            const editorIds = [...items].map(item => item.dataset.editorId);
+            
+            try {
+                await fetch('/api/settings/editors/reorder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(editorIds)
+                });
+            } catch (e) {
+                console.error('Failed to reorder editors:', e);
+            }
+        }
+        
+        // Editor Modal
+        function openAddEditorModal() {
+            editingEditorId = null;
+            document.getElementById('modal-title').textContent = t('settings.editors.add');
+            document.getElementById('editor-name').value = '';
+            document.getElementById('editor-command').value = '';
+            document.getElementById('editor-args').value = '{path}';
+            selectedColor = '#1f6feb';
+            updateColorPicker();
+            document.getElementById('test-result').classList.add('hidden');
+            document.getElementById('editor-modal').classList.add('active');
+        }
+        
+        function openEditEditorModal(editorId) {
+            const editor = editors.find(e => e.editor_id === editorId);
+            if (!editor) return;
+            
+            editingEditorId = editorId;
+            document.getElementById('modal-title').textContent = t('actions.edit');
+            document.getElementById('editor-name').value = editor.name;
+            document.getElementById('editor-command').value = editor.command;
+            document.getElementById('editor-args').value = editor.args_template;
+            selectedColor = editor.color;
+            updateColorPicker();
+            document.getElementById('test-result').classList.add('hidden');
+            document.getElementById('editor-modal').classList.add('active');
+        }
+        
+        function closeEditorModal() {
+            document.getElementById('editor-modal').classList.remove('active');
+        }
+        
+        function updateColorPicker() {
+            document.querySelectorAll('.color-option').forEach(opt => {
+                opt.classList.toggle('selected', opt.dataset.color === selectedColor);
+            });
+        }
+        
+        document.querySelectorAll('.color-option').forEach(opt => {
+            opt.addEventListener('click', () => {
+                selectedColor = opt.dataset.color;
+                updateColorPicker();
+            });
+        });
+        
+        async function testEditor() {
+            const command = document.getElementById('editor-command').value;
+            const args = document.getElementById('editor-args').value;
+            
+            const testResult = document.getElementById('test-result');
+            
+            try {
+                const res = await fetch('/api/settings/editors/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command, args_template: args })
+                });
+                
+                const data = await res.json();
+                
+                testResult.classList.remove('hidden', 'success', 'error');
+                testResult.classList.add(data.status === 'ok' ? 'success' : 'error');
+                testResult.textContent = data.status === 'ok' 
+                    ? `✓ Команда найдена: ${data.path}` 
+                    : `✗ ${data.message}`;
+            } catch (e) {
+                testResult.classList.remove('hidden', 'success');
+                testResult.classList.add('error');
+                testResult.textContent = `✗ Ошибка: ${e.message}`;
+            }
+        }
+        
+        async function saveEditor() {
+            const name = document.getElementById('editor-name').value.trim();
+            const command = document.getElementById('editor-command').value.trim();
+            const args = document.getElementById('editor-args').value.trim() || '{path}';
+            
+            if (!name || !command) {
+                showToast(t('toast.fill_required'), true);
+                return;
+            }
+            
+            const editorData = {
+                editor_id: editingEditorId || name.toLowerCase().replace(/\s+/g, '_'),
+                name,
+                command,
+                args_template: args,
+                color: selectedColor,
+                is_enabled: true,
+                is_default: false
+            };
+            
+            try {
+                if (editingEditorId) {
+                    await fetch(`/api/settings/editors/${editingEditorId}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(editorData)
+                    });
+                } else {
+                    await fetch('/api/settings/editors', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(editorData)
+                    });
+                }
+                
+                closeEditorModal();
+                await loadEditors();
+                showToast(t('toast.saved'));
+            } catch (e) {
+                console.error('Failed to save editor:', e);
+                showToast(t('toast.error_save'), true);
+            }
+        }
+        
+        async function toggleEditor(editorId, enabled) {
+            const editor = editors.find(e => e.editor_id === editorId);
+            if (!editor) return;
+            
+            try {
+                await fetch(`/api/settings/editors/${editorId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...editor, is_enabled: enabled })
+                });
+                
+                await loadEditors();
+                showToast(enabled ? t('toast.editor_enabled') : t('toast.editor_disabled'));
+            } catch (e) {
+                console.error('Failed to toggle editor:', e);
+                showToast(t('toast.error'), true);
+            }
+        }
+        
+        async function setDefaultEditor(editorId) {
+            try {
+                await fetch(`/api/settings/editors/${editorId}/set-default`, {
+                    method: 'POST'
+                });
+                
+                await loadEditors();
+                showToast(t('toast.editor_default'));
+            } catch (e) {
+                console.error('Failed to set default editor:', e);
+                showToast(t('toast.error'), true);
+            }
+        }
+        
+        async function deleteEditor(editorId) {
+            if (!confirm(t('confirm.delete_editor'))) return;
+            
+            try {
+                await fetch(`/api/settings/editors/${editorId}`, {
+                    method: 'DELETE'
+                });
+                
+                await loadEditors();
+                showToast(t('toast.editor_deleted'));
+            } catch (e) {
+                console.error('Failed to delete editor:', e);
+                showToast(t('toast.error_delete'), true);
+            }
+        }
+        
+        // Toast
+        function showToast(message, isError = false) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-message').textContent = message;
+            toast.style.background = isError ? 'var(--danger)' : 'var(--accent-green)';
+            toast.classList.add('active');
+            
+            setTimeout(() => {
+                toast.classList.remove('active');
+            }, 3000);
+        }
+        
+        // Close modal on overlay click
+        document.getElementById('editor-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'editor-modal') closeEditorModal();
+        });
+    </script>
+</body>
+</html>

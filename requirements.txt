@@ -1,0 +1,20 @@
+# ProjectHub Dependencies
+# Install: pip install -r requirements.txt
+
+# Web Framework
+fastapi>=0.100.0
+uvicorn[standard]>=0.23.0
+
+# Data Validation
+pydantic>=2.0.0
+
+# Docker Integration
+docker>=6.0.0
+
+# Database (built-in sqlite3, no external package needed)
+
+# System Monitoring
+psutil>=5.9.0
+
+# MCP Server (optional, for AI integration)
+mcp>=0.1.0
