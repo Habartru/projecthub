@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ProjectHub</title>
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <script src="/static/vendor/lucide.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -149,12 +149,33 @@
             background: var(--bg-card);
             color: var(--text-primary);
         }
-        .filter-btn.active { 
+        .filter-btn.active {
             background: var(--accent-blue);
             color: #fff;
             font-weight: 500;
         }
-        
+        .filter-btn .cat-count {
+            margin-left: auto;
+            font-size: 11px;
+            opacity: 0.7;
+            min-width: 18px;
+            text-align: center;
+        }
+        .filter-btn.active .cat-count { opacity: 0.9; }
+
+        /* Category selector in modal */
+        .category-select {
+            width: 100%;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+            color: var(--text-primary);
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .category-select:focus { outline: none; border-color: var(--accent-blue); }
+
         .main-content {
             display: flex;
             flex-direction: column;
@@ -705,24 +726,11 @@
     <div class="container">
         <div class="sidebar">
             <h3 data-i18n="sidebar.categories">Категории</h3>
-            <button class="filter-btn active" data-filter="all">
-                <i data-lucide="layout-grid" style="width:16px;height:16px;"></i> <span data-i18n="sidebar.all_projects">Все проекты</span>
-            </button>
-            <button class="filter-btn" data-filter="@active">
-                <i data-lucide="circle-dot" style="width:16px;height:16px;color:#3fb950;"></i> <span data-i18n="sidebar.active_projects">Активные</span>
-            </button>
-            <button class="filter-btn" data-filter="@experiments">
-                <i data-lucide="flask-conical" style="width:16px;height:16px;"></i> <span data-i18n="sidebar.experiments">Эксперименты</span>
-            </button>
-            <button class="filter-btn" data-filter="@games">
-                <i data-lucide="gamepad-2" style="width:16px;height:16px;"></i> <span data-i18n="sidebar.games">Игры</span>
-            </button>
-            <button class="filter-btn" data-filter="@archive">
-                <i data-lucide="archive" style="width:16px;height:16px;"></i> <span data-i18n="sidebar.archive">Архив</span>
-            </button>
-            <button class="filter-btn" data-filter="@data">
-                <i data-lucide="database" style="width:16px;height:16px;"></i> <span data-i18n="sidebar.data">Данные</span>
-            </button>
+            <div id="sidebar-categories">
+                <button class="filter-btn active" data-filter="all">
+                    <i data-lucide="layout-grid" style="width:16px;height:16px;"></i> <span>Все проекты</span>
+                </button>
+            </div>
             
             <div class="sidebar-metrics">
                 <h3 data-i18n="sidebar.system">Система</h3>
@@ -880,6 +888,7 @@
         });
 
         let allProjects = [];
+        let allCategories = [];
         let currentFilter = 'all';
         let currentSort = 'name';
         let currentProjectId = null;
@@ -1083,6 +1092,52 @@
             }
         }
         
+        // Load categories and render sidebar
+        async function loadCategories() {
+            try {
+                const res = await fetch('/api/categories');
+                const data = await res.json();
+                allCategories = data.categories;
+                renderSidebar();
+            } catch (e) {
+                console.error('Failed to load categories:', e);
+            }
+        }
+
+        function renderSidebar() {
+            const container = document.getElementById('sidebar-categories');
+            if (!container) return;
+
+            let html = `
+                <button class="filter-btn ${currentFilter === 'all' ? 'active' : ''}" data-filter="all" onclick="setFilter('all')">
+                    <i data-lucide="layout-grid" style="width:16px;height:16px;"></i>
+                    <span>${t('sidebar.all_projects') || 'Все проекты'}</span>
+                    <span class="cat-count">${allProjects.length}</span>
+                </button>
+            `;
+
+            for (const cat of allCategories) {
+                if (cat.project_count === 0) continue;
+                const isActive = currentFilter === cat.name;
+                html += `
+                    <button class="filter-btn ${isActive ? 'active' : ''}" data-filter="${cat.name}" onclick="setFilter('${cat.name}')">
+                        <i data-lucide="${cat.icon}" style="width:16px;height:16px;color:${cat.color};"></i>
+                        <span>${cat.display_name}</span>
+                        <span class="cat-count">${cat.project_count}</span>
+                    </button>
+                `;
+            }
+
+            container.innerHTML = html;
+            lucide.createIcons();
+        }
+
+        function setFilter(filter) {
+            currentFilter = filter;
+            renderSidebar();
+            renderProjects();
+        }
+
         // Load projects with session caching
         async function loadProjects(force = false) {
             try {
@@ -1405,6 +1460,23 @@
             }
         }
         
+        async function setProjectCategory(id, category) {
+            try {
+                const response = await fetch(`/api/projects/${id}/category`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ category })
+                });
+                if (response.ok) {
+                    await loadProjects(true);
+                    await loadCategories();
+                    openProjectDetail(id);
+                }
+            } catch (e) {
+                console.error('Failed to set category:', e);
+            }
+        }
+
         async function setProjectLabel(id, label) {
             try {
                 const response = await fetch(`/api/projects/${id}/label?label=${label}`, { 
@@ -1518,6 +1590,11 @@
                         <p><strong>${tr('modal.path', 'Путь')}:</strong> ${project.path || '-'}</p>
                         <p><strong>${tr('modal.type', 'Тип')}:</strong> ${getTypeIcon(project.project_type)}</p>
                         <p><strong>${tr('modal.status', 'Статус')}:</strong> <span class="status-badge status-${project.status}">${project.status}</span></p>
+                        <p><strong>${tr('modal.category', 'Категория')}:</strong>
+                            <select class="category-select" onchange="setProjectCategory(${project.id}, this.value)">
+                                ${allCategories.map(c => `<option value="${c.name}" ${c.name === project.category ? 'selected' : ''}>${c.display_name}</option>`).join('')}
+                            </select>
+                        </p>
                         ${project.label ? `<p><strong>${tr('modal.label', 'Лейбл')}:</strong> ${getLabelBadge(project.label)} ${project.label}</p>` : ''}
                     </div>
                     
@@ -1614,20 +1691,29 @@
         }
         
         async function syncProjects() {
+            console.log('=== SYNC STARTED ===');
+            // Сначала делаем реальную синхронизацию с диском
+            try {
+                console.log('Calling POST /api/projects/sync...');
+                const response = await fetch('/api/projects/sync', { method: 'POST' });
+                console.log('Response status:', response.status);
+                if (!response.ok) {
+                    const error = await response.text();
+                    console.error('Sync failed:', error);
+                } else {
+                    const data = await response.json();
+                    console.log('Sync success:', data);
+                }
+            } catch (e) {
+                console.error('Sync error:', e);
+            }
+            // Затем перезагружаем все данные
+            console.log('Reloading data...');
             await loadStats();
             await loadSystemMetrics();
             await loadProjects();
+            console.log('=== SYNC COMPLETED ===');
         }
-        
-        // Filter buttons
-        document.querySelectorAll('.filter-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                currentFilter = btn.dataset.filter;
-                renderProjects();
-            });
-        });
         
         // Debounced search - only searches 300ms after user stops typing
         const debouncedSearch = debounce(() => {
@@ -1646,7 +1732,8 @@
             await loadUserSettings();
             loadSystemMetrics();
             loadStats();
-            loadProjects();
+            await loadProjects();
+            await loadCategories();
         }
         
         init();

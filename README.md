@@ -26,7 +26,9 @@
 | ⚡ **Zero-Lag Performance** | Smart caching, debounced search, visibility-aware updates | Works smoothly even on 10-year-old laptops |
 | 🎨 **Three Beautiful Themes** | GitHub Dark, GitHub Light, Midnight OLED | Easy on the eyes, day or night |
 | 🌍 **Multi-Language** | English, Русский, 中文 | Native experience for global developers |
+| 📂 **Smart Categories** | Auto-detects `@folders` + container dirs with independent projects | No manual setup needed |
 | 🤖 **MCP Server Built-in** | AI agents can query your projects via Model Context Protocol | The ONLY project manager with AI integration |
+| 🔒 **Security Hardened** | Command injection protection, editor validation, path traversal blocking | Safe to use on any machine |
 | 🏷️ **Smart Labels** | Favorite ★, Working ▶, Archive ◼ | Organize without overthinking |
 | 🐳 **Docker Aware** | Shows running containers per project | DevOps-ready |
 | 🌿 **Git Integration** | Branch, status, last commit at a glance | No more `cd && git status` |
@@ -66,7 +68,7 @@ cd projecthub
 
 # Create virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
@@ -75,25 +77,25 @@ pip install -r requirements.txt
 python backend/main.py
 
 # Open in browser
-open http://localhost:8472/static/index.html
+xdg-open http://127.0.0.1:8472
 ```
 
-### One-Line Setup (Coming Soon)
+### Autostart (Linux)
 
-```bash
-curl -fsSL https://projecthub.dev/install.sh | bash
-```
+ProjectHub автоматически запускается при входе в систему через `~/.config/autostart/projecthub.desktop`.
+Лог: `~/.config/projecthub/server.log`
 
 ## 🖥️ Dashboard Features
 
 ### Main View
 - **Project Cards** — Visual cards with type icons, labels, tags
-- **Category Filtering** — @active, @archive, @experiments, etc.
-- **Smart Sorting** — By name, by activity, custom drag-and-drop order
-- **Quick Actions** — Open in Windsurf, Antigravity, or file manager
+- **Dynamic Categories** — Auto-detected from `~/Projects/@*/` structure, plus container detection for nested project groups
+- **Smart Sorting** — By name, activity, status, favorites, custom order
+- **Quick Actions** — Open in any configured editor (Windsurf, VS Code, Cursor, etc.)
 
 ### Project Detail Modal
 - 📋 Project info & metadata
+- 📂 Category assignment (change project category from dropdown)
 - 🏷️ Label management (Favorite/Working/Archive)
 - 🌿 Git status (branch, changes, last commit)
 - 🐳 Docker containers
@@ -203,16 +205,23 @@ Benchmarked on a 2015 MacBook Air (4GB RAM):
 ```
 projecthub/
 ├── backend/
-│   ├── main.py              # FastAPI server + MCP
+│   ├── main.py              # FastAPI server (API + security)
 │   └── static/
-│       ├── index.html       # Main dashboard
+│       ├── index.html       # Main dashboard (dynamic sidebar, modals)
 │       ├── settings.html    # Configuration UI
-│       └── tests/
+│       └── vendor/
+│           └── lucide.js    # Bundled icons (offline support)
+├── mcp-server/              # MCP server for AI agents
+│   ├── server.py            # Scans ~/Projects/@*/*
+│   ├── install.sh           # Setup script
+│   └── requirements.txt
+├── dashboard.sh             # Terminal dashboard (Guake)
+├── dev_aliases.sh           # Shell aliases
 ├── docs/
-│   └── assets/              # Screenshots, demos
-├── mcp-server/              # Standalone MCP server
-│   ├── server.py
-│   └── README.md
+│   ├── assets/              # Screenshots
+│   ├── PRD.md               # Product requirements
+│   ├── ROADMAP.md           # Feature roadmap
+│   └── TECH_SPEC.md         # Technical specification
 └── README.md
 ```
 

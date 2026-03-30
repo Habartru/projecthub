@@ -51,6 +51,9 @@ logs/
 .env.local
 .env.*.local
 
+# MCP server venv
+mcp-server/.venv/
+
 # Node (if added later)
 node_modules/
 npm-debug.log*

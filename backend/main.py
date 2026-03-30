@@ -5,6 +5,8 @@ ProjectHub Backend - API для управления проектами
 
 import os
 import json
+import shlex
+import logging
 import sqlite3
 import subprocess
 from pathlib import Path
@@ -17,6 +19,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 import docker
+
+logger = logging.getLogger(__name__)
 
 # Конфигурация
 PROJECTS_ROOT = Path.home() / "Projects"
@@ -50,6 +54,11 @@ class Command(BaseModel):
     name: str
     command: str
     cwd: Optional[str] = None
+
+class SettingValue(BaseModel):
+    value: str
+    type: str = "string"
+    category: str = "general"
 
 # Инициализация БД
 def init_db():
@@ -141,12 +150,28 @@ def init_db():
             UNIQUE(lang_code, key)
         )
     ''')
-    
+
+    # Таблица категорий
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            display_name TEXT NOT NULL,
+            icon TEXT DEFAULT 'folder',
+            color TEXT DEFAULT '#6e7681',
+            sort_order INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
     # Инициализация дефолтных редакторов
     init_default_editors(cursor)
-    
+
     # Инициализация переводов
     init_translations(cursor)
+
+    # Инициализация категорий из файловой системы
+    init_categories(cursor)
     
     conn.commit()
     conn.close()
@@ -462,35 +487,144 @@ def init_translations(cursor):
             VALUES (?, ?, ?, ?)
         ''', trans)
 
-def scan_projects():
-    """Сканирование проектов в файловой системе"""
-    projects = []
-    
+# Иконки и цвета для известных категорий
+CATEGORY_PRESETS = {
+    '@active': {'icon': 'circle-dot', 'color': '#3fb950', 'display_name': 'Активные'},
+    '@bringo': {'icon': 'briefcase', 'color': '#3fb950', 'display_name': 'Bringo'},
+    '@BLOC': {'icon': 'blocks', 'color': '#f0883e', 'display_name': 'BLOC'},
+    '@games': {'icon': 'gamepad-2', 'color': '#a371f7', 'display_name': 'Игры'},
+    '@infrastructure': {'icon': 'server', 'color': '#58a6ff', 'display_name': 'Инфраструктура'},
+    '@site': {'icon': 'globe', 'color': '#58a6ff', 'display_name': 'Сайты'},
+    '@teleleo': {'icon': 'radio', 'color': '#f97316', 'display_name': 'Teleleo'},
+    '@docs': {'icon': 'file-text', 'color': '#8b949e', 'display_name': 'Документы'},
+    '@ГОТОВЫЕ': {'icon': 'check-circle', 'color': '#3fb950', 'display_name': 'Готовые'},
+    '@надо_доделать': {'icon': 'clock', 'color': '#f0883e', 'display_name': 'Надо доделать'},
+}
+
+def init_categories(cursor):
+    """Инициализация категорий из файловой системы"""
+    # Собираем все категории: @-папки + подкатегории (контейнеры)
+    all_categories = set()
+
     for category_dir in PROJECTS_ROOT.iterdir():
         if not category_dir.is_dir() or not category_dir.name.startswith('@'):
             continue
-            
-        category = category_dir.name
-        
-        for project_dir in category_dir.iterdir():
-            if not project_dir.is_dir():
+        all_categories.add(category_dir.name)
+
+        # Ищем контейнерные подпапки (используем ту же логику что scan_projects)
+        for item_dir in category_dir.iterdir():
+            if not item_dir.is_dir() or item_dir.name.startswith('.'):
                 continue
-                
-            name = project_dir.name
-            path = str(project_dir)
-            
-            # Определяем тип проекта через функцию
-            project_type = detect_project_type(project_dir)
-            
-            projects.append({
-                "name": name,
-                "path": path,
-                "category": category,
-                "display_name": name.replace('_', ' ').replace('-', ' '),
-                "project_type": project_type,
-                "status": "active" if category == "@active" else "archived"
-            })
-    
+            if _is_container_dir(item_dir):
+                all_categories.add(item_dir.name)
+
+    for idx, cat_name in enumerate(sorted(all_categories)):
+        preset = CATEGORY_PRESETS.get(cat_name, {})
+        display = preset.get('display_name', cat_name.lstrip('@').replace('_', ' '))
+        icon = preset.get('icon', 'folder')
+        color = preset.get('color', '#6e7681')
+
+        cursor.execute('''
+            INSERT OR IGNORE INTO categories (name, display_name, icon, color, sort_order)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (cat_name, display, icon, color, idx))
+
+PROJECT_MARKERS = {
+    'package.json', 'requirements.txt', 'Cargo.toml', 'go.mod',
+    'pom.xml', 'build.gradle', 'Makefile', 'CMakeLists.txt',
+    'manage.py', 'setup.py', 'pyproject.toml',
+}
+
+def _is_project_dir(d: Path) -> bool:
+    """Проверяет, является ли папка проектом (есть маркеры или .git)"""
+    if (d / '.git').is_dir():
+        return True
+    for marker in PROJECT_MARKERS:
+        if (d / marker).exists():
+            return True
+    return False
+
+MONOREPO_PART_NAMES = {
+    'frontend', 'backend', 'server', 'client', 'shared', 'app', 'api',
+    'web', 'mobile', 'core', 'common', 'lib', 'libs', 'packages',
+    'services', 'infra', 'deploy', 'scripts', 'tools', 'docs',
+    'mcp-server', 'collector', 'animation', 'dev',
+}
+
+def _is_container_dir(d: Path) -> bool:
+    """Проверяет, является ли папка контейнером (группой независимых проектов).
+    Отличает от монорепо по трём признакам:
+    1. Подпапки с именами frontend/backend/server/etc → монорепо
+    2. Подпапки содержат имя родителя (vivoai-server в VIVOAI) → монорепо
+    3. Независимые имена → контейнер"""
+    if _is_project_dir(d):
+        return False
+    subdirs = [s for s in d.iterdir() if s.is_dir() and not s.name.startswith('.')]
+    if not subdirs:
+        return False
+    project_subdirs = [s for s in subdirs if _is_project_dir(s)]
+    if not project_subdirs:
+        return False
+    # Если большинство подпапок-проектов — типичные части монорепо → НЕ контейнер
+    monorepo_count = sum(1 for s in project_subdirs if s.name.lower() in MONOREPO_PART_NAMES)
+    if monorepo_count > len(project_subdirs) / 2:
+        return False
+    # Если подпапки содержат имя родителя → это варианты одного проекта, НЕ контейнер
+    # (datalens, datalens-agent, datalens-mcp внутри DATALENS → монорепо)
+    parent_name = d.name.lower()
+    name_shared = sum(1 for s in project_subdirs
+                      if parent_name in s.name.lower() or s.name.lower() in parent_name)
+    if name_shared > len(project_subdirs) / 2:
+        return False
+    # Минимум 2 подпапки-проекта с независимыми именами → контейнер
+    independent = len(project_subdirs) - name_shared
+    return independent >= 2
+
+def scan_projects():
+    """Сканирование проектов с автодетектом контейнерных папок (глубина 2-3)"""
+    projects = []
+
+    for category_dir in PROJECTS_ROOT.iterdir():
+        if not category_dir.is_dir() or not category_dir.name.startswith('@'):
+            continue
+
+        fs_category = category_dir.name  # @bringo, @active, etc.
+
+        for item_dir in category_dir.iterdir():
+            if not item_dir.is_dir() or item_dir.name.startswith('.'):
+                continue
+
+            if _is_container_dir(item_dir):
+                # Это контейнер (чат, сбор данных, etc.) — сканируем подпапки
+                subcategory = item_dir.name  # "чат", "сбор данных"
+                for sub_project_dir in item_dir.iterdir():
+                    if not sub_project_dir.is_dir() or sub_project_dir.name.startswith('.'):
+                        continue
+                    # Уникальное имя: "контейнер/проект" чтобы избежать коллизий
+                    unique_name = f"{subcategory}/{sub_project_dir.name}"
+                    project_type = detect_project_type(sub_project_dir)
+                    projects.append({
+                        "name": unique_name,
+                        "path": str(sub_project_dir),
+                        "category": subcategory,
+                        "parent_category": fs_category,
+                        "display_name": sub_project_dir.name.replace('_', ' ').replace('-', ' '),
+                        "project_type": project_type,
+                        "status": "active" if fs_category == "@active" else "archived"
+                    })
+            else:
+                # Обычный проект
+                project_type = detect_project_type(item_dir)
+                projects.append({
+                    "name": item_dir.name,
+                    "path": str(item_dir),
+                    "category": fs_category,
+                    "parent_category": fs_category,
+                    "display_name": item_dir.name.replace('_', ' ').replace('-', ' '),
+                    "project_type": project_type,
+                    "status": "active" if fs_category == "@active" else "archived"
+                })
+
     return projects
 
 def detect_project_type(project_dir: Path) -> str:
@@ -508,10 +642,10 @@ def detect_project_type(project_dir: Path) -> str:
                     for subitem in item.iterdir():
                         if subitem.is_file():
                             all_files.append(f"{item.name}/{subitem.name}")
-                except:
-                    pass
-    except:
-        pass
+                except Exception:
+                    logger.debug("Failed to iterate subdirectory in %s", project_dir)
+    except Exception:
+        logger.debug("Failed to iterate project directory %s", project_dir)
     
     files = set(all_files)
     
@@ -536,8 +670,8 @@ def detect_project_type(project_dir: Path) -> str:
                     if "express" in deps: return "express"
                     if "@nestjs/core" in deps: return "nestjs"
                     if "electron" in deps: return "electron"
-            except:
-                pass
+            except Exception:
+                logger.debug("Failed to parse package.json in %s", project_dir)
         
         # Проверяем config файлы
         if any(f.endswith("tsconfig.json") for f in files) or any(".ts" in f for f in files):
@@ -556,9 +690,9 @@ def detect_project_type(project_dir: Path) -> str:
                     if "django" in content: return "django"
                     if "flask" in content: return "flask"
                     if "fastapi" in content: return "fastapi"
-                except:
-                    pass
-        
+                except Exception:
+                    logger.debug("Failed to read %s in %s", req_file, project_dir)
+
         pyproject = project_dir / "pyproject.toml"
         if pyproject.exists():
             try:
@@ -566,8 +700,8 @@ def detect_project_type(project_dir: Path) -> str:
                 if "django" in content: return "django"
                 if "flask" in content: return "flask"
                 if "fastapi" in content: return "fastapi"
-            except:
-                pass
+            except Exception:
+                logger.debug("Failed to read pyproject.toml in %s", project_dir)
         
         return "python"
     
@@ -604,8 +738,8 @@ def detect_project_type(project_dir: Path) -> str:
                     reqs = {**pkg.get("require", {}), **pkg.get("require-dev", {})}
                     if "laravel/framework" in reqs: return "laravel"
                     if "symfony/framework" in reqs: return "symfony"
-            except:
-                pass
+            except Exception:
+                logger.debug("Failed to parse composer.json in %s", project_dir)
         return "php"
     
     # Ruby
@@ -837,33 +971,51 @@ def detect_project_type(project_dir: Path) -> str:
     return "unknown"
 
 def sync_projects():
-    """Синхронизация проектов с БД (с обновлением типов)"""
+    """Синхронизация проектов с БД (с обновлением типов и удалением несуществующих)"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
+
     scanned = scan_projects()
-    
+    # Индекс по пути — самый надёжный уникальный ключ
+    scanned_by_path = {proj["path"]: proj for proj in scanned}
+
+    # Удаляем проекты, которых больше нет на диске
+    cursor.execute("SELECT id, name, path FROM projects")
+    existing_projects = cursor.fetchall()
+
+    for proj_id, name, path in existing_projects:
+        if path not in scanned_by_path or not os.path.exists(path):
+            cursor.execute("DELETE FROM projects WHERE id = ?", (proj_id,))
+            cursor.execute("DELETE FROM notes WHERE project_id = ?", (proj_id,))
+            cursor.execute("DELETE FROM commands WHERE project_id = ?", (proj_id,))
+
     for proj in scanned:
-        # Проверяем существует ли проект
-        cursor.execute("SELECT id FROM projects WHERE name = ?", (proj["name"],))
+        # Проверяем по пути (более надёжно чем по имени)
+        cursor.execute("SELECT id, category FROM projects WHERE path = ?", (proj["path"],))
         existing = cursor.fetchone()
-        
+
         if existing:
-            # Обновляем тип проекта
+            proj_id, db_category = existing
+            # Не перезаписываем категорию если пользователь её вручную менял
+            was_auto = db_category in (proj.get("parent_category", proj["category"]), proj["category"])
+            new_category = proj["category"] if was_auto else db_category
             cursor.execute('''
-                UPDATE projects 
-                SET project_type = ?, path = ?, category = ?, display_name = ?, status = ?
-                WHERE name = ?
-            ''', (proj["project_type"], proj["path"], proj["category"], 
-                  proj["display_name"], proj["status"], proj["name"]))
+                UPDATE projects
+                SET project_type = ?, name = ?, display_name = ?, status = ?, category = ?
+                WHERE id = ?
+            ''', (proj["project_type"], proj["name"],
+                  proj["display_name"], proj["status"], new_category, proj_id))
         else:
             # Создаем новый проект
             cursor.execute('''
                 INSERT INTO projects (name, path, category, display_name, project_type, status)
                 VALUES (?, ?, ?, ?, ?, ?)
-            ''', (proj["name"], proj["path"], proj["category"], 
+            ''', (proj["name"], proj["path"], proj["category"],
                   proj["display_name"], proj["project_type"], proj["status"]))
-    
+
+    # Обновляем категории
+    init_categories(cursor)
+
     conn.commit()
     conn.close()
 
@@ -929,6 +1081,21 @@ def get_projects(
     
     return {"projects": projects, "total": len(projects), "sort": sort}
 
+@app.post("/api/projects/sync")
+def api_sync_projects():
+    """Ручная синхронизация проектов с диском (добавляет новые, удаляет несуществующие)"""
+    try:
+        sync_projects()
+        # Получаем статистику после синхронизации
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM projects")
+        total = cursor.fetchone()[0]
+        conn.close()
+        return {"status": "synced", "total": total}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+
 @app.get("/api/projects/{project_id}")
 def get_project(project_id: int):
     """Получить детали проекта"""
@@ -986,6 +1153,133 @@ def add_note(project_id: int, note: Note):
     
     return {"id": note_id, "status": "created"}
 
+# ===== Categories API =====
+
+class CategoryCreate(BaseModel):
+    name: str
+    display_name: str
+    icon: str = "folder"
+    color: str = "#6e7681"
+
+class CategoryUpdate(BaseModel):
+    display_name: Optional[str] = None
+    icon: Optional[str] = None
+    color: Optional[str] = None
+
+@app.get("/api/categories")
+def get_categories():
+    """Получить все категории с количеством проектов"""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT * FROM categories ORDER BY sort_order, name")
+    categories = [dict(row) for row in cursor.fetchall()]
+
+    # Считаем проекты в каждой категории
+    cursor.execute("SELECT category, COUNT(*) as cnt FROM projects GROUP BY category")
+    counts = {row['category']: row['cnt'] for row in cursor.fetchall()}
+
+    for cat in categories:
+        cat['project_count'] = counts.get(cat['name'], 0)
+
+    conn.close()
+    return {"categories": categories}
+
+@app.post("/api/categories")
+def create_category(cat: CategoryCreate):
+    """Создать новую категорию"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    # Получаем максимальный sort_order
+    cursor.execute("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM categories")
+    next_order = cursor.fetchone()[0]
+
+    try:
+        cursor.execute('''
+            INSERT INTO categories (name, display_name, icon, color, sort_order)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (cat.name, cat.display_name, cat.icon, cat.color, next_order))
+        cat_id = cursor.lastrowid
+        conn.commit()
+    except sqlite3.IntegrityError:
+        conn.close()
+        raise HTTPException(status_code=409, detail=f"Category '{cat.name}' already exists")
+
+    conn.close()
+    return {"id": cat_id, "status": "created"}
+
+@app.put("/api/categories/{cat_id}")
+def update_category(cat_id: int, cat: CategoryUpdate):
+    """Обновить категорию"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    updates = []
+    params = []
+    if cat.display_name is not None:
+        updates.append("display_name = ?")
+        params.append(cat.display_name)
+    if cat.icon is not None:
+        updates.append("icon = ?")
+        params.append(cat.icon)
+    if cat.color is not None:
+        updates.append("color = ?")
+        params.append(cat.color)
+
+    if not updates:
+        conn.close()
+        return {"status": "no_changes"}
+
+    params.append(cat_id)
+    cursor.execute(f"UPDATE categories SET {', '.join(updates)} WHERE id = ?", params)
+    conn.commit()
+    conn.close()
+    return {"status": "updated"}
+
+@app.delete("/api/categories/{cat_id}")
+def delete_category(cat_id: int):
+    """Удалить категорию (проекты не удаляются, только обнуляется привязка)"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    # Получаем имя категории
+    cursor.execute("SELECT name FROM categories WHERE id = ?", (cat_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    cat_name = row[0]
+
+    # Проекты в этой категории получают parent_category (@ папку)
+    # Не удаляем проекты — только категорию из справочника
+    cursor.execute("DELETE FROM categories WHERE id = ?", (cat_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "deleted", "name": cat_name}
+
+@app.post("/api/projects/{project_id}/category")
+def set_project_category(project_id: int, data: dict):
+    """Назначить категорию проекту"""
+    category = data.get("category")
+    if not category:
+        raise HTTPException(status_code=400, detail="Category is required")
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT id FROM projects WHERE id = ?", (project_id,))
+    if not cursor.fetchone():
+        conn.close()
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    cursor.execute("UPDATE projects SET category = ? WHERE id = ?", (category, project_id))
+    conn.commit()
+    conn.close()
+    return {"status": "updated", "category": category}
+
 @app.get("/api/stats")
 def get_stats():
     """Статистика по проектам"""
@@ -1014,27 +1308,38 @@ def launch_project(project_id: int, editor: str = "windsurf"):
     """Запустить проект в редакторе (windsurf или antigravity)"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
+
     cursor.execute("SELECT path FROM projects WHERE id = ?", (project_id,))
     row = cursor.fetchone()
-    conn.close()
-    
+
     if not row:
+        conn.close()
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
     path = row[0]
-    
+
+    # Validate editor against configured editors
+    cursor.execute(
+        "SELECT command, args_template FROM editor_configs WHERE user_id = 'default' AND editor_id = ? AND is_enabled = 1",
+        (editor,)
+    )
+    editor_row = cursor.fetchone()
+    conn.close()
+
+    if not editor_row:
+        raise HTTPException(status_code=404, detail=f"Editor '{editor}' not found or not enabled")
+
+    editor_command = editor_row[0]
+    args_template = editor_row[1] or '{path}'
+
+    # Build launch arguments from DB config
+    args = args_template.replace('{path}', path).split()
+
     # Запуск в фоне
     try:
-        subprocess.Popen([editor, path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen([editor_command] + args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except FileNotFoundError:
-        # Fallback to other editor
-        fallback = "antigravity" if editor == "windsurf" else "windsurf"
-        try:
-            subprocess.Popen([fallback, path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except FileNotFoundError:
-            # Last resort - xdg-open
-            subprocess.Popen(["xdg-open", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        raise HTTPException(status_code=500, detail=f"Editor command '{editor_command}' not found on system")
     
     # Обновить статистику
     conn = sqlite3.connect(DB_PATH)
@@ -1342,10 +1647,12 @@ def run_command(project_id: int, command_id: int):
         raise HTTPException(status_code=404, detail="Command not found")
     
     cmd, cwd = row
-    
-    # Run in terminal
+
+    # Run in terminal (escape values to prevent command injection)
+    safe_cwd = shlex.quote(cwd or '.')
+    safe_cmd = shlex.quote(cmd)
     subprocess.Popen(
-        ["gnome-terminal", "--", "bash", "-c", f"cd {cwd or '.'} && {cmd}; exec bash"],
+        ["gnome-terminal", "--", "bash", "-c", f"cd {safe_cwd} && bash -c {safe_cmd}; exec bash"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
     )
     
@@ -1392,15 +1699,15 @@ def get_settings():
     return {"settings": settings}
 
 @app.put("/api/settings")
-def update_settings(settings: dict):
+def update_settings(settings: dict[str, SettingValue]):
     """Обновить настройки пользователя"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
+
     for key, data in settings.items():
-        value = data.get('value') if isinstance(data, dict) else data
-        value_type = data.get('type', 'string') if isinstance(data, dict) else 'string'
-        category = data.get('category', 'general') if isinstance(data, dict) else 'general'
+        value = data.value
+        value_type = data.type
+        category = data.category
         
         cursor.execute('''
             INSERT INTO user_settings (user_id, key, value, value_type, category)
