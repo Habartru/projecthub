@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 # Конфигурация
 PROJECTS_ROOT = Path.home() / "Projects"
+PROJECTS_ROOT.mkdir(parents=True, exist_ok=True)
 DB_PATH = PROJECTS_ROOT / ".projecthub.db"
 
 # Brain / Knowledge base
