@@ -12,6 +12,14 @@ Then open **http://localhost:8472**
 
 ---
 
+| Dark | Light |
+|------|-------|
+| ![Dark theme](docs/assets/screenshot-dark.png) | ![Light theme](docs/assets/screenshot-light.png) |
+
+![Modal](docs/assets/screenshot-modal.png)
+
+---
+
 ## ✨ Features
 
 ### 🗂 Project Dashboard
