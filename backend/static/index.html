@@ -11,45 +11,57 @@
         :root {
             --bg-primary: #0d1117;
             --bg-secondary: #161b22;
-            --bg-card: #21262d;
-            --bg-hover: #30363d;
+            --bg-tertiary: #21262d;
+            --bg-card: #161b22;
+            --bg-hover: #21262d;
+            --border: #30363d;
             --border-color: #30363d;
-            --text-primary: #f0f6fc;
-            --text-secondary: #8b949e;
+            --text-primary: #e6edf3;
+            --text-secondary: #7d8590;
             --text-muted: #6e7681;
-            --accent-blue: #58a6ff;
+            --accent: #238636;
+            --accent-blue: #388bfd;
             --accent-green: #3fb950;
             --accent-orange: #f78166;
+            --accent-purple: #a371f7;
+            --radius: 8px;
+            --shadow: 0 1px 3px rgba(0,0,0,0.4);
         }
-        
         /* GitHub Light Theme */
         [data-theme="github-light"] {
-            --bg-primary: #ffffff;
-            --bg-secondary: #f6f8fa;
+            --bg-primary: #f6f8fa;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f3f4f6;
             --bg-card: #ffffff;
             --bg-hover: #f3f4f6;
+            --border: #d0d7de;
             --border-color: #d0d7de;
             --text-primary: #1f2328;
-            --text-secondary: #656d76;
+            --text-secondary: #57606a;
             --text-muted: #8c959f;
+            --accent: #1a7f37;
             --accent-blue: #0969da;
             --accent-green: #1a7f37;
             --accent-orange: #cf5129;
+            --shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
-        
         /* Midnight OLED Theme */
         [data-theme="midnight"] {
             --bg-primary: #000000;
-            --bg-secondary: #0a0a0a;
-            --bg-card: #111111;
+            --bg-secondary: #0d0d0d;
+            --bg-tertiary: #161616;
+            --bg-card: #0d0d0d;
             --bg-hover: #1a1a1a;
-            --border-color: #222222;
-            --text-primary: #e6e6e6;
-            --text-secondary: #888888;
-            --text-muted: #555555;
+            --border: #1e1e1e;
+            --border-color: #1e1e1e;
+            --text-primary: #e2e8f0;
+            --text-secondary: #718096;
+            --text-muted: #4a5568;
+            --accent: #22c55e;
             --accent-blue: #4da6ff;
             --accent-green: #4ae168;
             --accent-orange: #ff8a5c;
+            --shadow: 0 1px 3px rgba(0,0,0,0.8);
         }
         
         body {
@@ -58,55 +70,40 @@
             color: var(--text-primary);
             min-height: 100vh;
             line-height: 1.5;
+            font-size: 14px;
         }
-        
         .header {
             background: var(--bg-secondary);
-            border-bottom: 1px solid var(--border-color);
-            padding: 12px 24px;
+            border-bottom: 1px solid var(--border);
+            padding: 0 20px;
             display: flex;
             align-items: center;
             justify-content: space-between;
+            height: 56px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
-        
-        .header h1 { 
-            font-size: 18px; 
+        .header h1 {
+            font-size: 15px;
             font-weight: 600;
             color: var(--text-primary);
             display: flex;
             align-items: center;
             gap: 8px;
         }
-        
-        .header h1 i {
-            color: var(--accent-blue);
-        }
-        
-        .stats {
-            display: flex;
-            gap: 20px;
-            font-size: 13px;
-        }
-        
-        .stat { 
-            display: flex; 
-            align-items: center; 
-            gap: 6px; 
-            color: var(--text-secondary);
-        }
-        .stat-value { 
-            font-weight: 700; 
-            color: var(--text-primary);
-            font-size: 14px;
-        }
+        .header h1 i { color: var(--accent-blue); }
+        .stats { display: flex; gap: 16px; font-size: 13px; }
+        .stat { display: flex; align-items: center; gap: 5px; color: var(--text-secondary); }
+        .stat-value { font-weight: 600; color: var(--text-primary); }
         
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
-            padding: 24px;
+            padding: 20px 24px;
             display: grid;
-            grid-template-columns: 240px 1fr;
-            gap: 24px;
+            grid-template-columns: 220px 1fr;
+            gap: 20px;
         }
         
         /* Top nav tabs */
@@ -254,23 +251,54 @@
             color: var(--accent);
             opacity: 0.8;
         }
-        .sidebar {
+        /* ── TOP NAV ── */
+        .top-nav {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            padding: 8px 16px;
+            border-bottom: 1px solid var(--border);
             background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 16px;
+        }
+        .top-nav .nav-tab {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 12px;
+            border-radius: 6px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.15s;
+        }
+        .top-nav .nav-tab:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .top-nav .nav-tab.active { background: var(--accent-blue); color: #fff; }
+        .top-nav .nav-tab .badge {
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            padding: 1px 6px;
+            font-size: 11px;
+        }
+        .top-nav .nav-tab:not(.active) .badge { background: var(--bg-hover); color: var(--text-secondary); }
+        /* ── SIDEBAR ── */
+        .sidebar {
+            background: transparent;
+            padding: 0;
             height: fit-content;
             position: sticky;
-            top: 80px;
+            top: 100px;
         }
-        
         .sidebar h3 {
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 600;
-            color: var(--text-secondary);
-            margin-bottom: 12px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.6px;
+            color: var(--text-muted);
+            padding: 0 8px;
+            margin: 16px 0 4px;
         }
         
         .filter-btn {
@@ -407,15 +435,18 @@
         
         .project-card {
             background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 16px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 16px;
             cursor: pointer;
-            transition: all 0.15s;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            display: flex;
+            flex-direction: column;
+            gap: 0;
         }
-        
         .project-card:hover {
             border-color: var(--accent-blue);
+            box-shadow: 0 0 0 1px var(--accent-blue)20;
         }
         
         .project-header {
@@ -427,26 +458,30 @@
         }
         
         .project-name {
-            font-size: 16px;
+            font-size: 14px;
             font-weight: 600;
             color: var(--text-primary);
+            line-height: 1.3;
         }
         
         .project-category {
             font-size: 11px;
-            padding: 3px 8px;
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
+            padding: 2px 7px;
+            background: var(--bg-hover);
+            border-radius: 4px;
             color: var(--text-muted);
             font-weight: 500;
+            white-space: nowrap;
         }
         
         .project-path {
-            font-size: 12px;
+            font-size: 11px;
             color: var(--text-muted);
-            margin-bottom: 12px;
+            margin: 4px 0 10px;
             font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, monospace;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
         
         .project-tags {
@@ -482,13 +517,13 @@
         }
         
         .action-btn {
-            width: 36px;
-            height: 36px;
+            width: 32px;
+            height: 32px;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
+            background: var(--bg-hover);
+            border: 1px solid var(--border);
             border-radius: 6px;
             color: var(--text-secondary);
             cursor: pointer;
@@ -536,49 +571,69 @@
         
         .modal {
             background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 16px;
+            border: 1px solid var(--border);
+            border-radius: 12px;
             width: 90%;
-            max-width: 800px;
-            max-height: 90vh;
+            max-width: 720px;
+            max-height: 88vh;
             overflow: hidden;
             display: flex;
             flex-direction: column;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
         }
-        
         .modal-header {
-            padding: 24px;
-            border-bottom: 1px solid var(--border-color);
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
             display: flex;
             align-items: center;
             justify-content: space-between;
         }
-        
-        .modal-title { font-size: 20px; font-weight: 600; }
+        .modal-title { font-size: 16px; font-weight: 600; }
         .modal-close {
-            background: none;
-            border: none;
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-hover);
+            border: 1px solid var(--border);
+            border-radius: 6px;
             color: var(--text-secondary);
-            font-size: 24px;
+            font-size: 16px;
             cursor: pointer;
+            line-height: 1;
         }
-        
+        .modal-close:hover { color: var(--text-primary); }
         .modal-body {
-            padding: 24px;
+            padding: 20px;
             overflow-y: auto;
             flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
         }
-        
         .section {
-            margin-bottom: 24px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px 16px;
         }
-        
         .section h4 {
-            font-size: 14px;
-            color: var(--text-secondary);
-            margin-bottom: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-bottom: 10px;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
+        .section p {
+            font-size: 13px;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+            display: flex;
+            gap: 8px;
+        }
+        .section p strong { color: var(--text-secondary); font-weight: 500; min-width: 80px; }
         
         .notes-list {
             display: flex;
@@ -1793,78 +1848,63 @@
                 
                 body.innerHTML = `
                     <div class="section">
-                        <h4>📋 ${tr('modal.info', 'Информация')}</h4>
-                        <p><strong>${tr('modal.path', 'Путь')}:</strong> ${project.path || '-'}</p>
-                        <p><strong>${tr('modal.type', 'Тип')}:</strong> ${getTypeIcon(project.project_type)}</p>
-                        <p><strong>${tr('modal.status', 'Статус')}:</strong> <span class="status-badge status-${project.status}">${project.status}</span></p>
-                        <p><strong>${tr('modal.category', 'Категория')}:</strong>
+                        <h4>Информация</h4>
+                        <p><strong>Путь:</strong> <span style="font-family:monospace;font-size:12px;color:var(--text-muted)">${project.path || '-'}</span></p>
+                        <p><strong>Тип:</strong> ${getTypeIcon(project.project_type)}</p>
+                        <p><strong>Статус:</strong> <span class="status-badge status-${project.status}">${project.status}</span></p>
+                        <p><strong>Категория:</strong>
                             <select class="category-select" onchange="setProjectCategory(${project.id}, this.value)">
                                 ${allCategories.map(c => `<option value="${c.name}" ${c.name === project.category ? 'selected' : ''}>${c.display_name}</option>`).join('')}
                             </select>
                         </p>
-                        ${project.label ? `<p><strong>${tr('modal.label', 'Лейбл')}:</strong> ${getLabelBadge(project.label)} ${project.label}</p>` : ''}
                     </div>
-                    
+
                     <div class="section">
-                        <h4>🏷️ ${tr('modal.labels', 'Лейблы')}</h4>
+                        <h4>Лейбл</h4>
                         <div class="label-selector">
-                            <button class="label-btn ${project.label === 'favorite' ? 'active label-favorite' : ''}" onclick="setProjectLabel(${project.id}, 'favorite')">
-                                ★ ${tr('modal.labels_favorite', 'Избранное')}
-                            </button>
-                            <button class="label-btn ${project.label === 'working' ? 'active label-working' : ''}" onclick="setProjectLabel(${project.id}, 'working')">
-                                ▶ ${tr('modal.labels_working', 'В работе')}
-                            </button>
-                            <button class="label-btn ${project.label === 'archive' ? 'active label-archive' : ''}" onclick="setProjectLabel(${project.id}, 'archive')">
-                                ◼ ${tr('modal.labels_archive', 'Архив')}
-                            </button>
-                            <button class="label-btn ${project.label ? '' : 'active'}" onclick="setProjectLabel(${project.id}, '')">
-                                ✕ ${tr('modal.labels_none', 'Нет')}
-                            </button>
+                            <button class="label-btn ${project.label === 'favorite' ? 'active label-favorite' : ''}" onclick="setProjectLabel(${project.id}, 'favorite')">★ Избранное</button>
+                            <button class="label-btn ${project.label === 'working' ? 'active label-working' : ''}" onclick="setProjectLabel(${project.id}, 'working')">▶ В работе</button>
+                            <button class="label-btn ${project.label === 'archive' ? 'active label-archive' : ''}" onclick="setProjectLabel(${project.id}, 'archive')">◼ Архив</button>
+                            <button class="label-btn ${project.label ? '' : 'active'}" onclick="setProjectLabel(${project.id}, '')">✕ Нет</button>
                         </div>
                     </div>
-                    
+
                     ${git.is_git ? `
                     <div class="section">
-                        <h4>🌿 ${tr('modal.git', 'Git')}</h4>
-                        <p><strong>${tr('modal.git_branch', 'Ветка')}:</strong> ${git.branch || '-'}</p>
-                        <p><strong>${tr('modal.git_changes', 'Изменений')}:</strong> ${git.changes || 0}</p>
-                        <p><strong>${tr('modal.git_last_commit', 'Последний коммит')}:</strong> ${git.last_commit || '-'}</p>
-                    </div>
-                    ` : ''}
-                    
+                        <h4>Git</h4>
+                        <p><strong>Ветка:</strong> <code style="background:var(--bg-hover);padding:1px 6px;border-radius:4px;font-size:12px">${git.branch || '-'}</code></p>
+                        <p><strong>Изменений:</strong> ${git.changes || 0}</p>
+                        <p><strong>Коммит:</strong> <span style="font-size:12px;color:var(--text-secondary)">${git.last_commit || '-'}</span></p>
+                    </div>` : ''}
+
                     ${docker.containers && docker.containers.length > 0 ? `
                     <div class="section">
-                        <h4>🐳 ${tr('modal.docker', 'Docker')}</h4>
+                        <h4>Docker</h4>
                         ${docker.containers.map(c => `
-                            <p>${c.name} - ${c.status}</p>
+                            <p><span style="font-family:monospace;font-size:12px">${c.name}</span> <span class="status-badge status-${c.status === 'running' ? 'active' : 'inactive'}">${c.status}</span></p>
                         `).join('')}
-                    </div>
-                    ` : ''}
-                    
+                    </div>` : ''}
+
                     <div class="section">
-                        <h4>📝 ${tr('modal.notes', 'Заметки')}</h4>
+                        <h4>Заметки</h4>
                         <div class="notes-list" id="notes-list">
                             ${(project.notes || []).map(n => `
-                                <div class="note-item">
-                                    ${n.content}
-                                    <div class="note-date">${new Date(n.created_at).toLocaleString()}</div>
-                                </div>
-                            `).join('') || `<p style="color: #6e7681;">${tr('modal.notes_empty', 'Нет заметок')}</p>`}
+                                <div class="note-item">${n.content}<div class="note-date">${new Date(n.created_at).toLocaleString()}</div></div>
+                            `).join('') || `<p style="color:var(--text-muted);font-size:13px">Нет заметок</p>`}
                         </div>
                         <div class="add-note">
-                            <input type="text" class="note-input" id="note-input" placeholder="${tr('modal.notes_placeholder', 'Добавить заметку...')}">
-                            <button class="btn btn-primary" onclick="addNote()">${tr('modal.notes_add', 'Добавить')}</button>
+                            <input type="text" class="note-input" id="note-input" placeholder="Добавить заметку...">
+                            <button class="btn btn-primary" onclick="addNote()">Добавить</button>
                         </div>
                     </div>
-                    
+
                     <div class="section">
-                        <h4>⚡ ${tr('modal.quick_actions', 'Быстрые действия')}</h4>
-                        <div class="actions">
-                            <button class="action-btn folder" onclick="openProjectFolder(${id})" title="${tr('projects.open_folder', 'Открыть папку')}">
-                                <i data-lucide="folder-open" style="width:18px;height:18px;"></i>
+                        <h4>Открыть в</h4>
+                        <div class="actions" style="justify-content:flex-start">
+                            <button class="action-btn folder" onclick="openProjectFolder(${id})" title="Открыть папку">
+                                <i data-lucide="folder-open" style="width:16px;height:16px;"></i>
                             </button>
                             ${modalEditorButtons}
-                        </div>
                     </div>
                 `;
                 lucide.createIcons();
