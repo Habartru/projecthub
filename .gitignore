@@ -1,5 +1,21 @@
 # ProjectHub
 
+# Personal aliases and internal scripts
+dev_aliases.sh
+dashboard.sh
+
+# Internal development docs (PRD, specs, roadmaps)
+docs/PRD.md
+docs/ROADMAP.md
+docs/TECH_SPEC.md
+docs/settings-prd.md
+
+# Duplicate requirements
+requirements.txt
+
+# Frontend artifacts
+frontend/
+
 # Python
 __pycache__/
 *.py[cod]
