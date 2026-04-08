@@ -971,7 +971,7 @@
                     <div style="font-size:12px;color:var(--text-secondary)">Теги (через запятую)</div>
                     <input type="text" id="li-tags" placeholder="tailwind, auth, docker">
                     <button class="btn btn-primary" onclick="submitLogInsight()" style="align-self:flex-end">
-                        <i data-lucide="save" style="width:14px;height:14px;"></i> Сохранить
+                        <i data-lucide="save" style="width:14px;height:14px;"></i> <span data-i18n="actions.save">Сохранить</span>
                     </button>
                 </div>
             </div>
@@ -1207,45 +1207,71 @@
             document.documentElement.setAttribute('data-theme', theme);
         }
         
-        async function loadTranslations() {
+        async function loadTranslations(force = false) {
             try {
-                // Check cache first
-                const cached = cache.persistent.get(`translations_${currentLang}`);
-                if (cached) {
-                    translations = cached;
-                    applyTranslations();
+                if (!force) {
+                    const cached = cache.persistent.get(`translations_${currentLang}`);
+                    if (cached) {
+                        translations = cached;
+                        applyTranslations();
+                    }
                 }
-                
                 const res = await fetch(`/api/settings/i18n/${currentLang}`);
                 const data = await res.json();
                 translations = data.translations;
-                cache.persistent.set(`translations_${currentLang}`, translations, 86400000); // 24 hours
+                cache.persistent.set(`translations_${currentLang}`, translations, 3600000); // 1h
                 applyTranslations();
             } catch (e) {
                 console.error('Failed to load translations:', e);
             }
         }
-        
+
         function applyTranslations() {
             document.querySelectorAll('[data-i18n]').forEach(el => {
                 const key = el.getAttribute('data-i18n');
-                if (translations[key]) {
-                    el.textContent = translations[key];
+                const val = translations[key];
+                if (!val) return;
+                // If element has child elements (e.g. lucide icon), only update text nodes
+                const hasChildren = el.children.length > 0;
+                if (hasChildren) {
+                    // Find or create a text span after the icon
+                    let textNode = el.querySelector('[data-i18n-text]');
+                    if (!textNode) {
+                        // Replace last text node
+                        for (let node of el.childNodes) {
+                            if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+                                node.textContent = ' ' + val;
+                                return;
+                            }
+                        }
+                        // Append if no text node found
+                        el.appendChild(document.createTextNode(' ' + val));
+                    } else {
+                        textNode.textContent = val;
+                    }
+                } else {
+                    el.textContent = val;
                 }
             });
-            // Handle placeholders
             document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
                 const key = el.getAttribute('data-i18n-placeholder');
-                if (translations[key]) {
-                    el.placeholder = translations[key];
-                }
+                if (translations[key]) el.placeholder = translations[key];
             });
+            // Re-render dynamic content that uses t()
+            if (typeof renderProjects === 'function' && allProjects.length > 0) renderProjects();
         }
-        
-        // Translation helper function
-        function t(key) {
-            return translations[key] || key;
-        }
+
+        // Translation helper
+        function t(key) { return translations[key] || key; }
+
+        // Listen for language change from settings.html (same origin, localStorage event)
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'projecthub_lang_changed') {
+                currentLang = e.newValue;
+                cache.persistent.delete && cache.persistent.delete(`translations_${currentLang}`);
+                loadTranslations(true);
+            }
+        });
         
         // Load system metrics with caching - different intervals for each metric type
         let lastMetricsLoad = { cpu: 0, ram: 0, disk: 0 };
@@ -1848,60 +1874,55 @@
                 
                 body.innerHTML = `
                     <div class="section">
-                        <h4>Информация</h4>
-                        <p><strong>Путь:</strong> <span style="font-family:monospace;font-size:12px;color:var(--text-muted)">${project.path || '-'}</span></p>
-                        <p><strong>Тип:</strong> ${getTypeIcon(project.project_type)}</p>
-                        <p><strong>Статус:</strong> <span class="status-badge status-${project.status}">${project.status}</span></p>
-                        <p><strong>Категория:</strong>
-                            <select class="category-select" onchange="setProjectCategory(${project.id}, this.value)">
-                                ${allCategories.map(c => `<option value="${c.name}" ${c.name === project.category ? 'selected' : ''}>${c.display_name}</option>`).join('')}
-                            </select>
-                        </p>
+                        <h4>${t('modal.info')}</h4>
+                        <p><strong>${t('modal.path')}:</strong> <span style="font-family:monospace;font-size:12px;color:var(--text-muted)">${project.path || '-'}</span></p>
+                        <p><strong>${t('modal.type')}:</strong> ${getTypeIcon(project.project_type)}</p>
+                        <p><strong>${t('modal.status')}:</strong> <span class="status-badge status-${project.status}">${project.status}</span></p>
                     </div>
 
                     <div class="section">
-                        <h4>Лейбл</h4>
+                        <h4>${t('modal.label')}</h4>
                         <div class="label-selector">
-                            <button class="label-btn ${project.label === 'favorite' ? 'active label-favorite' : ''}" onclick="setProjectLabel(${project.id}, 'favorite')">★ Избранное</button>
-                            <button class="label-btn ${project.label === 'working' ? 'active label-working' : ''}" onclick="setProjectLabel(${project.id}, 'working')">▶ В работе</button>
-                            <button class="label-btn ${project.label === 'archive' ? 'active label-archive' : ''}" onclick="setProjectLabel(${project.id}, 'archive')">◼ Архив</button>
-                            <button class="label-btn ${project.label ? '' : 'active'}" onclick="setProjectLabel(${project.id}, '')">✕ Нет</button>
+                            <button class="label-btn ${project.label === 'favorite' ? 'active label-favorite' : ''}" onclick="setProjectLabel(${project.id}, 'favorite')">★ ${t('modal.labels_favorite')}</button>
+                            <button class="label-btn ${project.label === 'working' ? 'active label-working' : ''}" onclick="setProjectLabel(${project.id}, 'working')">▶ ${t('modal.labels_working')}</button>
+                            <button class="label-btn ${project.label === 'archive' ? 'active label-archive' : ''}" onclick="setProjectLabel(${project.id}, 'archive')">◼ ${t('modal.labels_archive')}</button>
+                            <button class="label-btn ${project.label ? '' : 'active'}" onclick="setProjectLabel(${project.id}, '')">✕ ${t('modal.labels_none')}</button>
                         </div>
                     </div>
 
                     ${git.is_git ? `
                     <div class="section">
-                        <h4>Git</h4>
-                        <p><strong>Ветка:</strong> <code style="background:var(--bg-hover);padding:1px 6px;border-radius:4px;font-size:12px">${git.branch || '-'}</code></p>
-                        <p><strong>Изменений:</strong> ${git.changes || 0}</p>
-                        <p><strong>Коммит:</strong> <span style="font-size:12px;color:var(--text-secondary)">${git.last_commit || '-'}</span></p>
+                        <h4>${t('modal.git')}</h4>
+                        <p><strong>${t('modal.git_branch')}:</strong> <code style="background:var(--bg-hover);padding:1px 6px;border-radius:4px;font-size:12px">${git.branch || '-'}</code></p>
+                        <p><strong>${t('modal.git_changes')}:</strong> ${git.changes || 0}</p>
+                        <p><strong>${t('modal.git_last_commit')}:</strong> <span style="font-size:12px;color:var(--text-secondary)">${git.last_commit || '-'}</span></p>
                     </div>` : ''}
 
                     ${docker.containers && docker.containers.length > 0 ? `
                     <div class="section">
-                        <h4>Docker</h4>
+                        <h4>${t('modal.docker')}</h4>
                         ${docker.containers.map(c => `
                             <p><span style="font-family:monospace;font-size:12px">${c.name}</span> <span class="status-badge status-${c.status === 'running' ? 'active' : 'inactive'}">${c.status}</span></p>
                         `).join('')}
                     </div>` : ''}
 
                     <div class="section">
-                        <h4>Заметки</h4>
+                        <h4>${t('modal.notes')}</h4>
                         <div class="notes-list" id="notes-list">
                             ${(project.notes || []).map(n => `
                                 <div class="note-item">${n.content}<div class="note-date">${new Date(n.created_at).toLocaleString()}</div></div>
-                            `).join('') || `<p style="color:var(--text-muted);font-size:13px">Нет заметок</p>`}
+                            `).join('') || `<p style="color:var(--text-muted);font-size:13px">${t('modal.notes_empty')}</p>`}
                         </div>
                         <div class="add-note">
-                            <input type="text" class="note-input" id="note-input" placeholder="Добавить заметку...">
-                            <button class="btn btn-primary" onclick="addNote()">Добавить</button>
+                            <input type="text" class="note-input" id="note-input" placeholder="${t('modal.notes_placeholder')}">
+                            <button class="btn btn-primary" onclick="addNote()">${t('modal.notes_add')}</button>
                         </div>
                     </div>
 
                     <div class="section">
-                        <h4>Открыть в</h4>
+                        <h4>${t('modal.quick_actions')}</h4>
                         <div class="actions" style="justify-content:flex-start">
-                            <button class="action-btn folder" onclick="openProjectFolder(${id})" title="Открыть папку">
+                            <button class="action-btn folder" onclick="openProjectFolder(${id})" title="${t('projects.open_folder')}">
                                 <i data-lucide="folder-open" style="width:16px;height:16px;"></i>
                             </button>
                             ${modalEditorButtons}

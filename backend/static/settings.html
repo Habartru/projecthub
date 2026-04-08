@@ -759,6 +759,8 @@
                 if (key === 'language') {
                     currentLang = value;
                     await loadTranslations();
+                    // Notify index.html tab about language change
+                    localStorage.setItem('projecthub_lang_changed', value);
                 }
                 if (key === 'theme') {
                     applyTheme(value);
