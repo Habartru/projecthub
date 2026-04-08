@@ -7,6 +7,10 @@ Manage all your local projects in one place — open editors, track Git, monitor
 
 [🇷🇺 Русский](#русский) · [🇨🇳 中文](#中文) · [🇩🇪 Deutsch](#deutsch)
 
+```bash
+curl -fsSL https://raw.githubusercontent.com/Habartru/projecthub/main/install.sh | bash
+```
+
 </div>
 
 ---
