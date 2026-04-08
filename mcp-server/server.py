@@ -14,6 +14,7 @@ SECURITY PRINCIPLES:
 """
 
 import os
+import re
 import json
 import hashlib
 import subprocess
@@ -45,6 +46,12 @@ logger = logging.getLogger(__name__)
 PROJECTS_DIR = Path.home() / "Projects"
 CACHE_FILE = LOG_DIR / "projects_cache.json"
 CACHE_TTL = 300  # 5 minutes
+
+# Knowledge base (Obsidian vault is at @memory/brain/)
+MEMORY_DIR = Path.home() / "Projects" / "@memory" / "brain"
+DAILY_DIR = MEMORY_DIR / "daily"
+KNOWLEDGE_DIR = MEMORY_DIR / "knowledge"
+INDEX_FILE = KNOWLEDGE_DIR / "index.md"
 
 server = Server("project-context")
 
@@ -403,6 +410,136 @@ def get_databases() -> dict:
 
 
 # ==============================================================================
+# KNOWLEDGE BASE FUNCTIONS
+# ==============================================================================
+
+def ensure_knowledge_dirs():
+    """Ensure all knowledge base directories exist."""
+    for d in [DAILY_DIR, KNOWLEDGE_DIR / "concepts", KNOWLEDGE_DIR / "projects", KNOWLEDGE_DIR / "qa"]:
+        d.mkdir(parents=True, exist_ok=True)
+
+
+def get_daily_log_path() -> Path:
+    """Get path to today's daily log."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    return DAILY_DIR / f"{today}.md"
+
+
+def append_to_daily_log(project: str, insight_type: str, content: str, tags: list[str]):
+    """Append an insight entry to today's daily log."""
+    ensure_knowledge_dirs()
+    log_path = get_daily_log_path()
+    timestamp = datetime.now().strftime("%H:%M")
+    tags_str = " ".join(f"#{t}" for t in tags) if tags else ""
+
+    entry = (
+        f"\n## [{timestamp}] {project}\n"
+        f"**Type:** {insight_type}  \n"
+        f"**Tags:** {tags_str}  \n\n"
+        f"{content}\n"
+        f"\n---\n"
+    )
+
+    if not log_path.exists():
+        header = (
+            f"# Daily Log — {datetime.now().strftime('%Y-%m-%d')}\n\n"
+            f"*Автоматически записывается MCP project-context*\n\n"
+        )
+        log_path.write_text(header + entry)
+    else:
+        with log_path.open("a") as f:
+            f.write(entry)
+
+
+def get_project_knowledge_path(project_name: str) -> Path:
+    """Get path to project knowledge file."""
+    safe_name = project_name.replace("/", "--").replace(" ", "_")
+    return KNOWLEDGE_DIR / "projects" / f"{safe_name}.md"
+
+
+def load_project_knowledge(project_name: str) -> str:
+    """Load accumulated knowledge for a project."""
+    proj_file = get_project_knowledge_path(project_name)
+    if not proj_file.exists():
+        return ""
+    return proj_file.read_text()
+
+
+def compile_daily_to_project(project_name: str, entries: list[dict]) -> str:
+    """Compile daily log entries into project knowledge article."""
+    proj_file = get_project_knowledge_path(project_name)
+    ensure_knowledge_dirs()
+
+    existing = proj_file.read_text() if proj_file.exists() else ""
+
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    new_entries_md = ""
+    for e in entries:
+        tags_str = " ".join(f"#{t}" for t in e.get("tags", []))
+        new_entries_md += (
+            f"\n### {e['type']} — {e['timestamp']}\n"
+            f"{tags_str}  \n\n"
+            f"{e['content']}\n\n"
+        )
+
+    if existing:
+        # Insert new entries after the first ## section or at end
+        updated = existing + f"\n## Обновление {now}\n" + new_entries_md
+    else:
+        safe_name = project_name.replace("/", " / ")
+        updated = (
+            f"# {safe_name}\n\n"
+            f"*Knowledge article. Последнее обновление: {now}*\n\n"
+            f"## История решений\n"
+            + new_entries_md
+        )
+
+    proj_file.write_text(updated)
+    return str(proj_file)
+
+
+def update_index():
+    """Rebuild index.md from all project and concept files."""
+    ensure_knowledge_dirs()
+
+    projects_section = ""
+    proj_dir = KNOWLEDGE_DIR / "projects"
+    if proj_dir.exists():
+        for f in sorted(proj_dir.glob("*.md")):
+            display = f.stem.replace("--", "/").replace("_", " ")
+            mod_time = datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d")
+            projects_section += f"- [[projects/{f.stem}|{display}]] — обновлено {mod_time}\n"
+
+    concepts_section = ""
+    con_dir = KNOWLEDGE_DIR / "concepts"
+    if con_dir.exists():
+        for f in sorted(con_dir.glob("*.md")):
+            display = f.stem.replace("-", " ").replace("_", " ")
+            concepts_section += f"- [[concepts/{f.stem}|{display}]]\n"
+
+    if not projects_section:
+        projects_section = "*(пока пусто — появится после первого log_session_insight)*\n"
+    if not concepts_section:
+        concepts_section = "*(пока пусто)*\n"
+
+    content = INDEX_FILE.read_text() if INDEX_FILE.exists() else ""
+
+    content = re.sub(
+        r"<!-- PROJECTS_INDEX_START -->.*?<!-- PROJECTS_INDEX_END -->",
+        f"<!-- PROJECTS_INDEX_START -->\n{projects_section}<!-- PROJECTS_INDEX_END -->",
+        content,
+        flags=re.DOTALL
+    )
+    content = re.sub(
+        r"<!-- CONCEPTS_INDEX_START -->.*?<!-- CONCEPTS_INDEX_END -->",
+        f"<!-- CONCEPTS_INDEX_START -->\n{concepts_section}<!-- CONCEPTS_INDEX_END -->",
+        content,
+        flags=re.DOTALL
+    )
+    INDEX_FILE.write_text(content)
+
+
+# ==============================================================================
 # MCP TOOLS
 # ==============================================================================
 
@@ -529,6 +666,82 @@ SECURITY:
                     }
                 },
                 "required": ["project_name", "file_path"]
+            }
+        ),
+        Tool(
+            name="log_session_insight",
+            description="""Save an important insight, decision, pattern or lesson learned from the current session to the knowledge base.
+
+Call this when you discover:
+- Architecture decisions (why something was built a certain way)
+- Bugs and their fixes (gotchas)
+- Reusable patterns specific to this project
+- Tech stack details (versions, configs)
+- Anything worth remembering for next session
+
+The insight is written to a daily log and compiled into a permanent project knowledge article.""",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_name": {
+                        "type": "string",
+                        "description": "Project name: 'category/name' or just 'name'"
+                    },
+                    "insight_type": {
+                        "type": "string",
+                        "enum": ["decision", "bug", "pattern", "gotcha", "stack", "qa", "other"],
+                        "description": "Type of insight"
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "The insight content. Be specific and actionable."
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Tags for searchability, e.g. ['tailwind', 'auth', 'docker']"
+                    }
+                },
+                "required": ["project_name", "insight_type", "content"]
+            }
+        ),
+        Tool(
+            name="get_project_context",
+            description="""Retrieve accumulated knowledge for a project from the knowledge base.
+
+Call this at the START of a session when working on a specific project.
+Returns all saved decisions, patterns, bugs, and lessons learned.
+This is how the AI 'remembers' previous sessions.""",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_name": {
+                        "type": "string",
+                        "description": "Project name: 'category/name' or just 'name'"
+                    }
+                },
+                "required": ["project_name"]
+            }
+        ),
+        Tool(
+            name="compile_knowledge",
+            description="""Compile daily logs into structured project knowledge articles and update the index.
+
+Run this:
+- After a productive session to crystallize learnings
+- When the daily log has accumulated many entries
+- To rebuild the index.md for Obsidian
+
+Reads all unprocessed daily log entries and merges them into permanent knowledge articles.""",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_name": {
+                        "type": "string",
+                        "description": "Optional: compile only for specific project. Leave empty to compile all."
+                    }
+                },
+                "required": []
             }
         ),
     ]
@@ -734,6 +947,119 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
             except Exception as e:
                 return [TextContent(type="text", text=f"Read error: {e}")]
 
+        elif name == "log_session_insight":
+            project_name = arguments.get("project_name", "")
+            insight_type = arguments.get("insight_type", "other")
+            content = arguments.get("content", "").strip()
+            tags = arguments.get("tags", [])
+
+            if not content:
+                return [TextContent(type="text", text="Error: content is required")]
+
+            exists, error, key, path = ProjectContext.validate_project(project_name)
+            if not exists:
+                return [TextContent(type="text", text=error)]
+
+            append_to_daily_log(key, insight_type, content, tags)
+
+            compile_daily_to_project(key, [{
+                "type": insight_type,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "content": content,
+                "tags": tags,
+            }])
+            update_index()
+
+            daily_path = get_daily_log_path()
+            proj_path_kb = get_project_knowledge_path(key)
+            return [TextContent(
+                type="text",
+                text=(
+                    f"✓ Insight saved for project '{key}'\n"
+                    f"  Type: {insight_type}\n"
+                    f"  Tags: {', '.join(tags) if tags else 'none'}\n"
+                    f"  Daily log: {daily_path}\n"
+                    f"  Knowledge article: {proj_path_kb}\n"
+                    f"  Obsidian vault: ~/Projects/@memory/\n"
+                )
+            )]
+
+        elif name == "get_project_context":
+            project_name = arguments.get("project_name", "")
+            exists, error, key, path = ProjectContext.validate_project(project_name)
+            if not exists:
+                return [TextContent(type="text", text=error)]
+
+            knowledge = load_project_knowledge(key)
+            if not knowledge:
+                return [TextContent(
+                    type="text",
+                    text=(
+                        f"No knowledge base entry found for project '{key}'.\n"
+                        f"Use log_session_insight to start building the knowledge base."
+                    )
+                )]
+
+            proj_info = get_project_info(key, path)
+            header = (
+                f"\n╔══════════════════════════════════════════════════════════════════╗\n"
+                f"║ KNOWLEDGE BASE: {key:<49}║\n"
+                f"║ Stack: {', '.join(proj_info['type']) or 'unknown':<59}║\n"
+                f"╚══════════════════════════════════════════════════════════════════╝\n\n"
+            )
+            return [TextContent(type="text", text=header + knowledge)]
+
+        elif name == "compile_knowledge":
+            project_filter = arguments.get("project_name", "").strip()
+
+            daily_path = get_daily_log_path()
+            if not daily_path.exists():
+                return [TextContent(
+                    type="text",
+                    text=f"No daily log for today ({daily_path.name}). Nothing to compile."
+                )]
+
+            content_raw = daily_path.read_text()
+            entry_pattern = re.compile(
+                r"## \[(\d{2}:\d{2})\] (.+?)\n\*\*Type:\*\* (.+?)  \n\*\*Tags:\*\* (.*?)  \n\n(.*?)\n\n---",
+                re.DOTALL
+            )
+
+            by_project: dict[str, list] = {}
+            for m in entry_pattern.finditer(content_raw):
+                time_str, proj, itype, tags_raw, body = m.groups()
+                if project_filter and proj != project_filter:
+                    continue
+                tags = [t.lstrip("#") for t in tags_raw.split() if t.startswith("#")]
+                by_project.setdefault(proj, []).append({
+                    "timestamp": f"{datetime.now().strftime('%Y-%m-%d')} {time_str}",
+                    "type": itype,
+                    "content": body.strip(),
+                    "tags": tags,
+                })
+
+            if not by_project:
+                msg = f"No entries found in today's log"
+                if project_filter:
+                    msg += f" for project '{project_filter}'"
+                return [TextContent(type="text", text=msg)]
+
+            compiled = []
+            for proj, entries in by_project.items():
+                file_path = compile_daily_to_project(proj, entries)
+                compiled.append(f"  ✓ {proj} → {file_path} ({len(entries)} entries)")
+
+            update_index()
+
+            return [TextContent(
+                type="text",
+                text=(
+                    f"Knowledge compiled successfully:\n"
+                    + "\n".join(compiled)
+                    + f"\n\nIndex updated: {INDEX_FILE}"
+                )
+            )]
+
         else:
             return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
@@ -748,8 +1074,8 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 @server.list_resources()
 async def list_resources() -> list[Resource]:
-    """List available resources."""
-    resources = [
+    """List available resources (static only to avoid IDE reconnect loops)."""
+    return [
         Resource(
             uri="system://status",
             name="System Status",
@@ -763,18 +1089,6 @@ async def list_resources() -> list[Resource]:
             mimeType="application/json"
         ),
     ]
-
-    for project_key in ProjectContext.list_projects():
-        # URI-safe key: replace / with --
-        uri_key = project_key.replace("/", "--")
-        resources.append(Resource(
-            uri=f"project://{uri_key}/info",
-            name=f"{project_key} Info",
-            description=f"Information about project {project_key}",
-            mimeType="application/json"
-        ))
-
-    return resources
 
 
 @server.read_resource()
