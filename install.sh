@@ -6,6 +6,21 @@
 # ╚══════════════════════════════════════════════════════════╝
 set -euo pipefail
 
+# Detect if running interactively (not via curl | bash pipe)
+IS_INTERACTIVE=false
+[ -t 0 ] && IS_INTERACTIVE=true
+
+# Safe prompt: only ask if interactive, otherwise use default
+prompt() {
+  local question="$1" default="$2" varname="$3"
+  if [ "$IS_INTERACTIVE" = true ]; then
+    read -rp "  $question" "$varname"
+  else
+    eval "$varname='$default'"
+    echo "  $question$default (auto)"
+  fi
+}
+
 # ── Colors ─────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
 BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
@@ -62,6 +77,16 @@ fi
 
 # ── Step 3: Python virtualenv + deps ──────────────────────
 step "Step 3/5 — Installing Python dependencies"
+
+# Ensure python3-venv is available (Debian/Ubuntu may need it)
+if ! python3 -m venv --help &>/dev/null; then
+  if command -v apt-get &>/dev/null; then
+    warn "python3-venv not found, installing..."
+    sudo apt-get install -y python3-venv python3-pip 2>/dev/null || err "Could not install python3-venv. Run: sudo apt install python3-venv"
+  else
+    err "python3-venv module not available. Install it for your OS first."
+  fi
+fi
 
 VENV="$INSTALL_DIR/venv"
 python3 -m venv "$VENV"
@@ -161,7 +186,7 @@ if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
 fi
 
 # ── Optional: systemd autostart ───────────────────────────
-if command -v systemctl &>/dev/null && systemctl --user status &>/dev/null 2>&1; then
+if command -v systemctl &>/dev/null; then
   SVCDIR="$HOME/.config/systemd/user"
   mkdir -p "$SVCDIR"
   cat > "$SVCDIR/projecthub.service" <<SVC
@@ -178,13 +203,13 @@ RestartSec=5
 [Install]
 WantedBy=default.target
 SVC
-  systemctl --user daemon-reload
-  ok "systemd service created (projecthub.service)"
+  systemctl --user daemon-reload 2>/dev/null || true
+  ok "systemd service created (~/.config/systemd/user/projecthub.service)"
   echo ""
-  read -rp "  Enable autostart on login? [y/N] " AUTOSTART
+  AUTOSTART="n"
+  prompt "Enable autostart on login? [y/N] " "n" AUTOSTART
   if [[ "$AUTOSTART" =~ ^[Yy]$ ]]; then
-    systemctl --user enable --now projecthub.service
-    ok "Autostart enabled"
+    systemctl --user enable --now projecthub.service 2>/dev/null && ok "Autostart enabled" || warn "Could not enable autostart — run manually: systemctl --user enable --now projecthub"
   fi
 fi
 
@@ -211,16 +236,24 @@ echo ""
 echo -e "  ${CYAN}Obsidian (optional):${NC} open $VAULT as vault"
 echo -e "  ${CYAN}Restart AI client${NC} to activate MCP Brain tools"
 echo ""
-read -rp "  Start ProjectHub now? [Y/n] " START
+START="y"
+prompt "Start ProjectHub now? [Y/n] " "y" START
 if [[ ! "$START" =~ ^[Nn]$ ]]; then
   info "Starting on http://localhost:$PORT ..."
-  "$LAUNCHER" &
+  nohup "$VENV/bin/python" "$INSTALL_DIR/backend/main.py" > "$HOME/.local/share/projecthub/projecthub.log" 2>&1 &
+  PHUB_PID=$!
   sleep 2
-  if command -v xdg-open &>/dev/null; then
-    xdg-open "http://localhost:$PORT" 2>/dev/null &
-  elif command -v open &>/dev/null; then
-    open "http://localhost:$PORT" &
+  if kill -0 "$PHUB_PID" 2>/dev/null; then
+    ok "ProjectHub is running (PID $PHUB_PID)"
+    if command -v xdg-open &>/dev/null; then
+      xdg-open "http://localhost:$PORT" 2>/dev/null &
+    elif command -v open &>/dev/null; then
+      open "http://localhost:$PORT" &
+    fi
+    ok "Opened http://localhost:$PORT"
+    echo -e "  Log: $HOME/.local/share/projecthub/projecthub.log"
+    echo -e "  Stop: kill $PHUB_PID"
+  else
+    warn "ProjectHub failed to start. Check log: $HOME/.local/share/projecthub/projecthub.log"
   fi
-  ok "ProjectHub is running! Press Ctrl+C to stop."
-  wait
 fi
