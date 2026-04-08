@@ -303,38 +303,31 @@
         
         .filter-btn {
             width: 100%;
-            padding: 8px 12px;
+            padding: 6px 10px;
             background: transparent;
             border: none;
             border-radius: 6px;
             color: var(--text-secondary);
             cursor: pointer;
-            font-size: 14px;
+            font-size: 13px;
             text-align: left;
             display: flex;
             align-items: center;
-            gap: 10px;
-            transition: all 0.15s;
-            margin-bottom: 2px;
+            gap: 8px;
+            transition: all 0.12s;
+            margin-bottom: 1px;
         }
-        
-        .filter-btn:hover { 
-            background: var(--bg-card);
-            color: var(--text-primary);
-        }
-        .filter-btn.active {
-            background: var(--accent-blue);
-            color: #fff;
-            font-weight: 500;
-        }
+        .filter-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+        .filter-btn.active { background: var(--accent-blue)20; color: var(--accent-blue); font-weight: 600; }
         .filter-btn .cat-count {
             margin-left: auto;
             font-size: 11px;
-            opacity: 0.7;
-            min-width: 18px;
-            text-align: center;
+            background: var(--bg-hover);
+            border-radius: 10px;
+            padding: 1px 6px;
+            color: var(--text-muted);
         }
-        .filter-btn.active .cat-count { opacity: 0.9; }
+        .filter-btn.active .cat-count { background: var(--accent-blue)30; color: var(--accent-blue); }
 
         /* Category selector in modal */
         .category-select {
@@ -357,22 +350,22 @@
         
         .toolbar {
             display: flex;
-            gap: 12px;
+            gap: 8px;
             align-items: center;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 12px 16px;
+            padding: 0 0 12px;
+            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
         }
         
         .search-box {
             flex: 1;
-            padding: 8px 12px;
-            background: var(--bg-primary);
-            border: 1px solid var(--border-color);
+            min-width: 180px;
+            padding: 7px 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
             border-radius: 6px;
             color: var(--text-primary);
-            font-size: 14px;
+            font-size: 13px;
         }
         
         .search-box:focus {
@@ -431,22 +424,6 @@
             .projects-grid {
                 grid-template-columns: 1fr;
             }
-        }
-        
-        .project-card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            padding: 14px 16px;
-            cursor: pointer;
-            transition: border-color 0.15s, box-shadow 0.15s;
-            display: flex;
-            flex-direction: column;
-            gap: 0;
-        }
-        .project-card:hover {
-            border-color: var(--accent-blue);
-            box-shadow: 0 0 0 1px var(--accent-blue)20;
         }
         
         .project-header {
@@ -535,19 +512,7 @@
             color: var(--text-primary);
         }
         
-        .action-btn.windsurf { 
-            background: var(--bg-card);
-            border-color: var(--border-color);
-        }
-        
-        .action-btn.windsurf:hover { 
-            background: var(--bg-hover);
-        }
-        
-        .action-btn.antigravity { 
-            background: var(--bg-card);
-            border-color: var(--border-color);
-        }
+        .action-btn.windsurf, .action-btn.antigravity { background: var(--bg-hover); }
         
         .action-btn.antigravity:hover { 
             background: var(--bg-hover);
@@ -642,10 +607,12 @@
         }
         
         .note-item {
-            background: var(--bg-card);
-            padding: 12px;
-            border-radius: 8px;
-            font-size: 14px;
+            background: var(--bg-hover);
+            border: 1px solid var(--border);
+            padding: 10px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+            line-height: 1.5;
         }
         
         .note-date {
@@ -662,11 +629,12 @@
         
         .note-input {
             flex: 1;
-            padding: 10px;
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
+            padding: 7px 10px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
             color: var(--text-primary);
+            font-size: 13px;
         }
         
         .commands-list {
@@ -714,32 +682,32 @@
         }
         
         .sort-btn {
-            padding: 8px 12px;
-            background: var(--bg-card);
-            border: 1px solid var(--border-color);
+            padding: 5px 10px;
+            background: transparent;
+            border: 1px solid var(--border);
             border-radius: 6px;
             color: var(--text-secondary);
             cursor: pointer;
-            font-size: 13px;
-            transition: all 0.2s;
+            font-size: 12px;
+            transition: all 0.12s;
         }
-        
-        .sort-btn:hover { background: var(--bg-hover); }
+        .sort-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
         .sort-btn.active { background: var(--accent-blue); color: #fff; border-color: var(--accent-blue); }
         
         .project-card {
             background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            padding: 20px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 16px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            display: flex;
+            flex-direction: column;
             position: relative;
         }
-        
         .project-card:hover {
             border-color: var(--accent-blue);
-            transform: translateY(-2px);
+            box-shadow: 0 2px 12px rgba(56,139,253,0.1);
         }
         
         .project-card.dragging {
@@ -836,45 +804,32 @@
         }
         
         .sidebar-metrics {
-            margin-top: 16px;
-            padding-top: 16px;
-            border-top: 1px solid var(--border-color);
+            margin-top: 20px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
         }
-        
-        .sidebar-metrics h3 {
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--text-secondary);
-            margin-bottom: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        
         .metric-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 6px 0;
-            font-size: 13px;
+            padding: 5px 8px;
+            border-radius: 5px;
+            font-size: 12px;
+            margin-bottom: 1px;
         }
-        
-        .metric-label {
-            color: var(--text-muted);
-        }
-        
-        .metric-value { 
-            font-weight: 600;
-            color: var(--text-primary);
-        }
+        .metric-row:hover { background: var(--bg-hover); }
+        .metric-label { color: var(--text-muted); }
+        .metric-value { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text-primary); }
         .metric-value.normal { color: var(--accent-green); }
         .metric-value.medium { color: var(--accent-orange); }
         .metric-value.high { color: #f85149; }
         
         .status-badge {
             display: inline-block;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 5px;
+            font-size: 11px;
+            font-weight: 500;
             font-weight: 500;
         }
         
