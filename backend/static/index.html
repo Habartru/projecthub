@@ -109,6 +109,151 @@
             gap: 24px;
         }
         
+        /* Top nav tabs */
+        .top-nav {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 10px 20px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-secondary);
+        }
+        .top-nav .nav-tab {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 6px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.15s;
+        }
+        .top-nav .nav-tab:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+        .top-nav .nav-tab.active { background: var(--accent); color: #fff; }
+        .top-nav .nav-tab .badge {
+            background: rgba(255,255,255,0.25);
+            color: #fff;
+            border-radius: 10px;
+            padding: 1px 6px;
+            font-size: 11px;
+        }
+        .top-nav .nav-tab:not(.active) .badge {
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+        }
+        /* Brain panel */
+        .brain-panel {
+            display: none;
+            padding: 20px;
+            height: calc(100vh - 100px);
+            overflow-y: auto;
+        }
+        .brain-panel.active { display: flex; gap: 20px; }
+        .brain-sidebar {
+            width: 260px;
+            flex-shrink: 0;
+        }
+        .brain-main { flex: 1; min-width: 0; }
+        .brain-search {
+            width: 100%;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
+        .brain-project-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            margin-bottom: 4px;
+            transition: all 0.15s;
+        }
+        .brain-project-item:hover { background: var(--bg-tertiary); border-color: var(--border); }
+        .brain-project-item.active { background: var(--bg-tertiary); border-color: var(--accent); }
+        .brain-project-name { font-size: 13px; color: var(--text-primary); font-weight: 500; }
+        .brain-project-meta { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+        .brain-insight-badge {
+            background: var(--accent);
+            color: #fff;
+            border-radius: 10px;
+            padding: 2px 7px;
+            font-size: 11px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+        .brain-article {
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid var(--border);
+        }
+        .brain-article h2 { font-size: 18px; margin: 0 0 16px; color: var(--text-primary); }
+        .brain-section {
+            border-left: 3px solid var(--border);
+            padding: 10px 14px;
+            margin-bottom: 12px;
+            border-radius: 0 6px 6px 0;
+            background: var(--bg-primary);
+        }
+        .brain-section.decision { border-left-color: #58a6ff; }
+        .brain-section.bug { border-left-color: #f85149; }
+        .brain-section.pattern { border-left-color: #3fb950; }
+        .brain-section.gotcha { border-left-color: #d29922; }
+        .brain-section.stack { border-left-color: #a371f7; }
+        .brain-section.qa { border-left-color: #39d353; }
+        .brain-section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+        .brain-type-badge {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .brain-type-badge.decision { background: rgba(88,166,255,0.15); color: #58a6ff; }
+        .brain-type-badge.bug { background: rgba(248,81,73,0.15); color: #f85149; }
+        .brain-type-badge.pattern { background: rgba(63,185,80,0.15); color: #3fb950; }
+        .brain-type-badge.gotcha { background: rgba(210,153,34,0.15); color: #d29922; }
+        .brain-type-badge.stack { background: rgba(163,113,247,0.15); color: #a371f7; }
+        .brain-type-badge.qa { background: rgba(57,211,83,0.15); color: #39d353; }
+        .brain-type-badge.other { background: rgba(139,148,158,0.15); color: #8b949e; }
+        .brain-date { font-size: 11px; color: var(--text-secondary); }
+        .brain-section-content { font-size: 13px; color: var(--text-primary); line-height: 1.6; white-space: pre-wrap; }
+        .brain-empty { text-align: center; padding: 60px 20px; color: var(--text-secondary); }
+        .brain-empty i { opacity: 0.3; margin-bottom: 12px; display: block; }
+        /* Log insight modal */
+        .log-insight-form { display: flex; flex-direction: column; gap: 12px; }
+        .log-insight-form select,
+        .log-insight-form textarea,
+        .log-insight-form input { 
+            padding: 8px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 13px;
+            font-family: inherit;
+        }
+        .log-insight-form textarea { min-height: 100px; resize: vertical; }
+        /* Insight badge on project cards */
+        .card-insight-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            color: var(--accent);
+            opacity: 0.8;
+        }
         .sidebar {
             background: var(--bg-secondary);
             border: 1px solid var(--border-color);
@@ -723,7 +868,68 @@
         </div>
     </div>
     
-    <div class="container">
+    <!-- Top Nav -->
+    <div class="top-nav">
+        <button class="nav-tab active" data-view="projects" onclick="switchView('projects')">
+            <i data-lucide="layout-grid" style="width:15px;height:15px;"></i> Проекты
+        </button>
+        <button class="nav-tab" data-view="brain" onclick="switchView('brain')">
+            <i data-lucide="brain" style="width:15px;height:15px;"></i> Brain
+            <span class="badge" id="brain-badge">0</span>
+        </button>
+    </div>
+
+    <!-- Brain Panel -->
+    <div class="brain-panel" id="brain-panel">
+        <div class="brain-sidebar">
+            <input type="text" class="brain-search" placeholder="Поиск по знаниям..." id="brain-search-input" oninput="brainSearch(this.value)">
+            <div id="brain-projects-list"><div style="color:var(--text-secondary);font-size:13px;padding:8px">Загрузка...</div></div>
+        </div>
+        <div class="brain-main">
+            <div class="brain-article" id="brain-article">
+                <div class="brain-empty">
+                    <i data-lucide="brain" style="width:48px;height:48px;"></i>
+                    <div style="font-size:16px;font-weight:600;margin-bottom:8px">Brain — память AI</div>
+                    <div style="font-size:13px">Выбери проект слева чтобы увидеть накопленные знания</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Log Insight Modal -->
+    <div class="modal-overlay" id="log-insight-modal" style="display:none" onclick="if(event.target===this)closeLogInsight()">
+        <div class="modal" style="max-width:480px">
+            <div class="modal-header">
+                <div class="modal-title">💡 Записать инсайт</div>
+                <button class="modal-close" onclick="closeLogInsight()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="log-insight-form">
+                    <div style="font-size:12px;color:var(--text-secondary)">Проект</div>
+                    <input type="text" id="li-project" placeholder="category/project" readonly style="opacity:0.7">
+                    <div style="font-size:12px;color:var(--text-secondary)">Тип</div>
+                    <select id="li-type">
+                        <option value="decision">🔵 Decision — архитектурное решение</option>
+                        <option value="bug">🔴 Bug — найденный баг и фикс</option>
+                        <option value="pattern">🟢 Pattern — повторяющийся паттерн</option>
+                        <option value="gotcha">🟡 Gotcha — подводный камень</option>
+                        <option value="stack">🟣 Stack — технологический стек</option>
+                        <option value="qa">🟩 QA — вопрос и ответ</option>
+                        <option value="other">⚪ Other</option>
+                    </select>
+                    <div style="font-size:12px;color:var(--text-secondary)">Описание</div>
+                    <textarea id="li-content" placeholder="Что важно запомнить? Будь конкретен."></textarea>
+                    <div style="font-size:12px;color:var(--text-secondary)">Теги (через запятую)</div>
+                    <input type="text" id="li-tags" placeholder="tailwind, auth, docker">
+                    <button class="btn btn-primary" onclick="submitLogInsight()" style="align-self:flex-end">
+                        <i data-lucide="save" style="width:14px;height:14px;"></i> Сохранить
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container" id="projects-panel">
         <div class="sidebar">
             <h3 data-i18n="sidebar.categories">Категории</h3>
             <div id="sidebar-categories">
@@ -774,6 +980,7 @@
             </div>
         </div>
     </div>
+    </div><!-- /projects-panel -->
     
     <!-- Project Detail Modal -->
     <div class="modal-overlay" id="modal">
@@ -1742,7 +1949,141 @@
         // CPU: 5s, RAM: 10s, others: 30s
         createSmartInterval(() => loadSystemMetrics(), 5000);
         createSmartInterval(() => loadStats(), 30000);
-        
+
+        // ── BRAIN ──────────────────────────────────────────────────────────
+        let brainProjectsCache = [];
+        let brainSearchTimer = null;
+
+        function switchView(view) {
+            document.querySelectorAll('.nav-tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+            const projectsPanel = document.getElementById('projects-panel');
+            const brainPanel = document.getElementById('brain-panel');
+            if (view === 'brain') {
+                projectsPanel.style.display = 'none';
+                brainPanel.classList.add('active');
+                loadBrainProjects();
+            } else {
+                projectsPanel.style.display = '';
+                brainPanel.classList.remove('active');
+            }
+            lucide.createIcons();
+        }
+
+        async function loadBrainStats() {
+            try {
+                const r = await fetch('/api/brain/stats');
+                const s = await r.json();
+                document.getElementById('brain-badge').textContent = s.total_insights || 0;
+            } catch(e) {}
+        }
+
+        async function loadBrainProjects() {
+            const r = await fetch('/api/brain/projects');
+            brainProjectsCache = await r.json();
+            renderBrainProjectsList(brainProjectsCache);
+        }
+
+        function renderBrainProjectsList(items) {
+            const el = document.getElementById('brain-projects-list');
+            if (!items.length) {
+                el.innerHTML = '<div style="color:var(--text-secondary);font-size:13px;padding:8px">Нет знаний. Используй log_session_insight в Windsurf или кнопку 💡 на карточке проекта.</div>';
+                return;
+            }
+            el.innerHTML = items.map(p => `
+                <div class="brain-project-item" onclick="loadBrainArticle('${p.slug}', this)" data-slug="${p.slug}">
+                    <div>
+                        <div class="brain-project-name">${p.display_name}</div>
+                        <div class="brain-project-meta">${p.last_updated}</div>
+                    </div>
+                    <span class="brain-insight-badge">${p.insight_count}</span>
+                </div>`).join('');
+        }
+
+        async function loadBrainArticle(slug, el) {
+            document.querySelectorAll('.brain-project-item').forEach(i => i.classList.remove('active'));
+            if (el) el.classList.add('active');
+            const art = document.getElementById('brain-article');
+            art.innerHTML = '<div style="padding:20px;color:var(--text-secondary)">Загрузка...</div>';
+            const r = await fetch(`/api/brain/projects/${slug}`);
+            const data = await r.json();
+            const displayName = slug.replace(/--/g, '/').replace(/_/g, ' ');
+            const typeColors = {decision:'decision',bug:'bug',pattern:'pattern',gotcha:'gotcha',stack:'stack',qa:'qa',other:'other'};
+            const sectionsHtml = data.sections.filter(s => s.content && s.content.join('').trim()).map(s => {
+                const type = (s.type || 'other').toLowerCase();
+                const tc = typeColors[type] || 'other';
+                const text = s.content.join('\n').trim();
+                return `<div class="brain-section ${tc}">
+                    <div class="brain-section-header">
+                        <span class="brain-type-badge ${tc}">${s.title || type}</span>
+                        ${s.date ? `<span class="brain-date">${s.date}</span>` : ''}
+                    </div>
+                    <div class="brain-section-content">${text.replace(/</g,'&lt;')}</div>
+                </div>`;
+            }).join('');
+            art.innerHTML = `
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+                    <h2 style="margin:0">${displayName}</h2>
+                    <button class="btn" onclick="openLogInsight('${displayName}')">
+                        <i data-lucide="plus" style="width:14px;height:14px;"></i> Добавить инсайт
+                    </button>
+                </div>
+                ${sectionsHtml || '<div class="brain-empty" style="padding:30px 0"><div style="color:var(--text-secondary)">Нет записей</div></div>'}`;
+            lucide.createIcons();
+        }
+
+        function brainSearch(query) {
+            clearTimeout(brainSearchTimer);
+            if (!query.trim()) { renderBrainProjectsList(brainProjectsCache); return; }
+            brainSearchTimer = setTimeout(async () => {
+                if (query.length < 2) return;
+                const r = await fetch(`/api/brain/search?q=${encodeURIComponent(query)}`);
+                const results = await r.json();
+                const el = document.getElementById('brain-projects-list');
+                if (!results.length) { el.innerHTML = '<div style="color:var(--text-secondary);font-size:13px;padding:8px">Ничего не найдено</div>'; return; }
+                el.innerHTML = results.map(p => `
+                    <div class="brain-project-item" onclick="loadBrainArticle('${p.slug}', this)">
+                        <div>
+                            <div class="brain-project-name">${p.display_name}</div>
+                            <div class="brain-project-meta" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.matches[0] || ''}</div>
+                        </div>
+                    </div>`).join('');
+            }, 300);
+        }
+
+        // Log Insight Modal
+        function openLogInsight(projectName) {
+            document.getElementById('li-project').value = projectName || '';
+            document.getElementById('li-content').value = '';
+            document.getElementById('li-tags').value = '';
+            document.getElementById('li-type').value = 'decision';
+            document.getElementById('log-insight-modal').style.display = 'flex';
+        }
+        function closeLogInsight() {
+            document.getElementById('log-insight-modal').style.display = 'none';
+        }
+        async function submitLogInsight() {
+            const project = document.getElementById('li-project').value.trim();
+            const type = document.getElementById('li-type').value;
+            const content = document.getElementById('li-content').value.trim();
+            const tagsRaw = document.getElementById('li-tags').value;
+            const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
+            if (!content) { alert('Опиши инсайт'); return; }
+            const r = await fetch('/api/brain/log', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({project_name: project, insight_type: type, content, tags})
+            });
+            if (r.ok) {
+                closeLogInsight();
+                loadBrainStats();
+                if (document.getElementById('brain-panel').classList.contains('active')) loadBrainProjects();
+            }
+        }
+
+        // Load brain stats on startup
+        loadBrainStats();
+        // ── END BRAIN ──────────────────────────────────────────────────────
+
         // Initialize Lucide icons
         lucide.createIcons();
     </script>

@@ -4,6 +4,7 @@ ProjectHub Backend - API для управления проектами
 """
 
 import os
+import re
 import json
 import shlex
 import logging
@@ -25,6 +26,12 @@ logger = logging.getLogger(__name__)
 # Конфигурация
 PROJECTS_ROOT = Path.home() / "Projects"
 DB_PATH = PROJECTS_ROOT / ".projecthub.db"
+
+# Brain / Knowledge base
+BRAIN_DIR = Path.home() / "Projects" / "@memory" / "brain"
+BRAIN_DAILY = BRAIN_DIR / "daily"
+BRAIN_PROJECTS = BRAIN_DIR / "knowledge" / "projects"
+BRAIN_INDEX = BRAIN_DIR / "knowledge" / "index.md"
 
 # Модели данных
 class Project(BaseModel):
@@ -1988,6 +1995,165 @@ def reset_settings():
     conn.close()
     
     return {"status": "reset"}
+
+# ==============================================================================
+# BRAIN API — Knowledge Base
+# ==============================================================================
+
+@app.get("/api/brain/stats")
+def brain_stats():
+    """Stats for Brain sidebar badge: total insights, projects with knowledge."""
+    stats = {"total_projects": 0, "total_insights": 0, "last_updated": None}
+    if not BRAIN_PROJECTS.exists():
+        return stats
+    files = list(BRAIN_PROJECTS.glob("*.md"))
+    stats["total_projects"] = len(files)
+    for f in files:
+        content = f.read_text(errors="replace")
+        stats["total_insights"] += len(re.findall(r"^### ", content, re.MULTILINE))
+    if files:
+        latest = max(files, key=lambda f: f.stat().st_mtime)
+        stats["last_updated"] = datetime.fromtimestamp(latest.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+    return stats
+
+
+@app.get("/api/brain/projects")
+def brain_projects():
+    """List all projects that have knowledge articles."""
+    if not BRAIN_PROJECTS.exists():
+        return []
+    result = []
+    for f in sorted(BRAIN_PROJECTS.glob("*.md"), key=lambda x: x.stat().st_mtime, reverse=True):
+        content = f.read_text(errors="replace")
+        insight_count = len(re.findall(r"^### ", content, re.MULTILINE))
+        display = f.stem.replace("--", "/").replace("_", " ")
+        mod_time = datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+        result.append({
+            "slug": f.stem,
+            "display_name": display,
+            "insight_count": insight_count,
+            "last_updated": mod_time,
+        })
+    return result
+
+
+@app.get("/api/brain/projects/{slug}")
+def brain_project_detail(slug: str):
+    """Get full knowledge article for a project."""
+    safe_slug = re.sub(r"[^a-zA-Z0-9@\-_]", "", slug)
+    path = BRAIN_PROJECTS / f"{safe_slug}.md"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Knowledge article not found")
+    content = path.read_text(errors="replace")
+    sections = []
+    current = {"title": "Общее", "type": "other", "content": [], "tags": []}
+    for line in content.splitlines():
+        m = re.match(r"^### (.+?) — (.+)$", line)
+        if m:
+            if current["content"]:
+                sections.append(current)
+            current = {"title": m.group(1), "type": m.group(1).lower(), "date": m.group(2), "content": [], "tags": []}
+        elif line.startswith("#"):
+            pass
+        elif re.match(r"^#\w", line):
+            current["tags"] = re.findall(r"#(\w+)", line)
+        else:
+            current["content"].append(line)
+    if current["content"]:
+        sections.append(current)
+    return {"slug": safe_slug, "sections": sections, "raw": content}
+
+
+@app.post("/api/brain/log")
+def brain_log(payload: dict):
+    """Log a new insight from the dashboard UI."""
+    project_name = payload.get("project_name", "").strip()
+    insight_type = payload.get("insight_type", "other")
+    content = payload.get("content", "").strip()
+    tags = payload.get("tags", [])
+
+    if not project_name or not content:
+        raise HTTPException(status_code=400, detail="project_name and content are required")
+
+    allowed_types = {"decision", "bug", "pattern", "gotcha", "stack", "qa", "other"}
+    if insight_type not in allowed_types:
+        insight_type = "other"
+
+    BRAIN_DAILY.mkdir(parents=True, exist_ok=True)
+    BRAIN_PROJECTS.mkdir(parents=True, exist_ok=True)
+
+    today = datetime.now().strftime("%Y-%m-%d")
+    timestamp = datetime.now().strftime("%H:%M")
+    daily_path = BRAIN_DAILY / f"{today}.md"
+    tags_str = " ".join(f"#{t}" for t in tags) if tags else ""
+
+    entry = (
+        f"\n## [{timestamp}] {project_name}\n"
+        f"**Type:** {insight_type}  \n"
+        f"**Tags:** {tags_str}  \n\n"
+        f"{content}\n\n---\n"
+    )
+
+    if not daily_path.exists():
+        daily_path.write_text(f"# Daily Log — {today}\n\n*Записано через ProjectHub Brain*\n" + entry)
+    else:
+        with daily_path.open("a") as f:
+            f.write(entry)
+
+    safe_name = project_name.replace("/", "--").replace(" ", "_")
+    proj_file = BRAIN_PROJECTS / f"{safe_name}.md"
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    new_section = (
+        f"\n## Обновление {now_str}\n\n"
+        f"### {insight_type} — {now_str}\n"
+        f"{tags_str}  \n\n{content}\n\n"
+    )
+    if proj_file.exists():
+        with proj_file.open("a") as f:
+            f.write(new_section)
+    else:
+        proj_file.write_text(
+            f"# {project_name}\n\n"
+            f"*Knowledge article. Создано: {now_str}*\n\n"
+            f"## История решений\n"
+            + new_section
+        )
+
+    return {"status": "ok", "daily_log": str(daily_path), "article": str(proj_file)}
+
+
+@app.get("/api/brain/search")
+def brain_search(q: str = Query(..., min_length=2)):
+    """Full-text search across all knowledge articles."""
+    if not BRAIN_PROJECTS.exists():
+        return []
+    results = []
+    q_lower = q.lower()
+    for f in BRAIN_PROJECTS.glob("*.md"):
+        content = f.read_text(errors="replace")
+        if q_lower in content.lower():
+            lines = [l for l in content.splitlines() if q_lower in l.lower()]
+            display = f.stem.replace("--", "/").replace("_", " ")
+            results.append({
+                "slug": f.stem,
+                "display_name": display,
+                "matches": lines[:5],
+            })
+    return results
+
+
+@app.get("/api/brain/project-insights/{project_name:path}")
+def project_insight_count(project_name: str):
+    """Get insight count for a specific project (for dashboard cards)."""
+    safe_name = project_name.replace("/", "--").replace(" ", "_")
+    path = BRAIN_PROJECTS / f"{safe_name}.md"
+    if not path.exists():
+        return {"count": 0, "last_updated": None}
+    content = path.read_text(errors="replace")
+    count = len(re.findall(r"^### ", content, re.MULTILINE))
+    mod_time = datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y-%m-%d")
+    return {"count": count, "last_updated": mod_time}
+
 
 @app.get("/", response_class=HTMLResponse)
 def index():
