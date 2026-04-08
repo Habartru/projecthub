@@ -1103,6 +1103,26 @@ def api_sync_projects():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
 
+@app.get("/api/projects/live")
+def get_live_projects():
+    """Return project ids that have running Docker containers."""
+    live_ids = []
+    try:
+        client = docker.from_env()
+        running = {c.name.lower(): c for c in client.containers.list()}
+        if not running:
+            return {"live": []}
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name FROM projects")
+        for pid, name in cursor.fetchall():
+            if any(name.lower() in cname for cname in running):
+                live_ids.append(pid)
+        conn.close()
+    except Exception:
+        pass
+    return {"live": live_ids}
+
 @app.get("/api/projects/{project_id}")
 def get_project(project_id: int):
     """Получить детали проекта"""
@@ -1995,6 +2015,37 @@ def reset_settings():
     conn.close()
     
     return {"status": "reset"}
+
+# ==============================================================================
+# ACTIVITY & LIVE API
+# ==============================================================================
+
+@app.get("/api/activity/heatmap")
+def activity_heatmap():
+    """Return daily open counts for last 84 days (12 weeks) for heatmap."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT DATE(last_opened) as day, COUNT(*) as count
+        FROM projects
+        WHERE last_opened IS NOT NULL
+          AND last_opened >= DATE('now', '-84 days')
+        GROUP BY DATE(last_opened)
+        ORDER BY day
+    """)
+    rows = cursor.fetchall()
+    conn.close()
+    data = {row[0]: row[1] for row in rows}
+
+    # Fill all 84 days
+    from datetime import date, timedelta
+    result = []
+    today = date.today()
+    for i in range(83, -1, -1):
+        d = (today - timedelta(days=i)).isoformat()
+        result.append({"date": d, "count": data.get(d, 0)})
+    return result
+
 
 # ==============================================================================
 # BRAIN API — Knowledge Base

@@ -856,6 +856,90 @@
         [class*="category-@games"] { border-left: 3px solid #a371f7; }
         [class*="category-@data"] { border-left: 3px solid #58a6ff; }
         [class*="category-@bringo"] { border-left: 3px solid #3fb950; }
+
+        /* ── LIVE BADGE ── */
+        .live-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            color: #3fb950;
+            background: rgba(63,185,80,0.12);
+            border: 1px solid rgba(63,185,80,0.3);
+            border-radius: 4px;
+            padding: 1px 6px;
+            text-transform: uppercase;
+        }
+        .live-badge::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            background: #3fb950;
+            border-radius: 50%;
+            animation: pulse-live 1.4s ease-in-out infinite;
+        }
+        @keyframes pulse-live {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(0.75); }
+        }
+        .project-card.is-live {
+            border-color: rgba(63,185,80,0.4);
+            box-shadow: 0 0 0 1px rgba(63,185,80,0.15), inset 0 0 20px rgba(63,185,80,0.04);
+        }
+        .project-card.is-live:hover {
+            border-color: #3fb950;
+            box-shadow: 0 0 0 1px rgba(63,185,80,0.3);
+        }
+
+        /* ── HEATMAP ── */
+        .heatmap-section {
+            margin-top: 20px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+        }
+        .heatmap-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: var(--text-muted);
+            padding: 0 8px;
+            margin-bottom: 8px;
+        }
+        .heatmap-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 3px;
+            padding: 0 4px;
+        }
+        .heatmap-col {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .heatmap-cell {
+            width: 100%;
+            aspect-ratio: 1;
+            border-radius: 2px;
+            background: var(--bg-hover);
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .heatmap-cell:hover { transform: scale(1.3); }
+        .heatmap-cell[data-level="1"] { background: rgba(63,185,80,0.25); }
+        .heatmap-cell[data-level="2"] { background: rgba(63,185,80,0.5); }
+        .heatmap-cell[data-level="3"] { background: rgba(63,185,80,0.75); }
+        .heatmap-cell[data-level="4"] { background: #3fb950; }
+        .heatmap-streak {
+            font-size: 11px;
+            color: var(--text-muted);
+            padding: 4px 8px 0;
+            display: flex;
+            gap: 8px;
+        }
+        .heatmap-streak span { color: var(--accent-green); font-weight: 600; }
     </style>
 </head>
 <body>
@@ -966,6 +1050,12 @@
                     <span class="metric-label" data-i18n="system.uptime">Up:</span>
                     <span class="metric-value normal" id="uptime-metric">-</span>
                 </div>
+            </div>
+
+            <div class="heatmap-section">
+                <div class="heatmap-title">Активность</div>
+                <div class="heatmap-grid" id="heatmap-grid"></div>
+                <div class="heatmap-streak" id="heatmap-streak"></div>
             </div>
         </div>
         
@@ -1631,14 +1721,18 @@
                     `;
                 }).join('');
                 
+                const isLive = liveProjectIds.has(p.id);
                 return `
-                <div class="project-card category-${p.category}" id="project-${p.id}"
-                     data-id="${p.id}" 
+                <div class="project-card category-${p.category}${isLive ? ' is-live' : ''}" id="project-${p.id}"
+                     data-id="${p.id}"
                      onclick="openProjectDetail(${p.id})">
                     <div class="project-header">
                         <div class="project-name">${getLabelBadge(p.label)}${p.display_name}</div>
                         ${moveButtons}
-                        <div class="project-category">${p.category}</div>
+                        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
+                            ${isLive ? '<span class="live-badge">live</span>' : ''}
+                            <div class="project-category">${p.category}</div>
+                        </div>
                     </div>
                     <div class="project-path">${p.path}</div>
                     <div class="project-tags">
@@ -1646,11 +1740,12 @@
                     </div>
                     <div class="project-meta">
                         <span>${getTypeIcon(p.project_type)}</span>
-                        ${p.open_count > 0 ? `<span>👁 ${p.open_count}</span>` : ''}
+                        ${p.open_count > 0 ? `<span style="color:var(--text-muted);font-size:11px">↗ ${p.open_count}</span>` : ''}
+                        ${p.last_opened ? `<span style="color:var(--text-muted);font-size:11px;margin-left:auto">${timeAgo(p.last_opened)}</span>` : ''}
                     </div>
                     <div class="actions" onclick="event.stopPropagation()">
                         <button class="action-btn folder" onclick="openProjectFolder(${p.id})" title="Открыть папку">
-                            <i data-lucide="folder-open" style="width:18px;height:18px;"></i>
+                            <i data-lucide="folder-open" style="width:16px;height:16px;"></i>
                         </button>
                         ${projectEditorButtons}
                     </div>
@@ -1936,14 +2031,17 @@
             loadStats();
             await loadProjects();
             await loadCategories();
+            loadLive();
+            loadHeatmap();
         }
         
         init();
         
         // Smart intervals - pause when tab is not visible
-        // CPU: 5s, RAM: 10s, others: 30s
         createSmartInterval(() => loadSystemMetrics(), 5000);
         createSmartInterval(() => loadStats(), 30000);
+        createSmartInterval(() => loadLive(), 15000);
+        createSmartInterval(() => loadHeatmap(), 60000);
 
         // ── BRAIN ──────────────────────────────────────────────────────────
         let brainProjectsCache = [];
@@ -2078,6 +2176,78 @@
         // Load brain stats on startup
         loadBrainStats();
         // ── END BRAIN ──────────────────────────────────────────────────────
+
+        // ── LIVE & HEATMAP ─────────────────────────────────────────────────
+        let liveProjectIds = new Set();
+
+        function timeAgo(isoStr) {
+            if (!isoStr) return '';
+            const diff = Date.now() - new Date(isoStr).getTime();
+            const m = Math.floor(diff / 60000);
+            if (m < 1) return 'только что';
+            if (m < 60) return `${m}м назад`;
+            const h = Math.floor(m / 60);
+            if (h < 24) return `${h}ч назад`;
+            const d = Math.floor(h / 24);
+            if (d < 30) return `${d}д назад`;
+            return `${Math.floor(d/30)}мес назад`;
+        }
+
+        async function loadLive() {
+            try {
+                const r = await fetch('/api/projects/live');
+                const data = await r.json();
+                const newSet = new Set(data.live || []);
+                const changed = newSet.size !== liveProjectIds.size ||
+                    [...newSet].some(id => !liveProjectIds.has(id));
+                liveProjectIds = newSet;
+                if (changed) renderProjects();
+            } catch(e) {}
+        }
+
+        async function loadHeatmap() {
+            try {
+                const r = await fetch('/api/activity/heatmap');
+                const days = await r.json();
+                const max = Math.max(...days.map(d => d.count), 1);
+                const grid = document.getElementById('heatmap-grid');
+                if (!grid) return;
+
+                // Split into 12 columns of 7 days
+                const cols = [];
+                for (let i = 0; i < 12; i++) cols.push(days.slice(i * 7, i * 7 + 7));
+
+                grid.innerHTML = cols.map(col =>
+                    `<div class="heatmap-col">${col.map(d => {
+                        const level = d.count === 0 ? 0
+                            : d.count <= max * 0.25 ? 1
+                            : d.count <= max * 0.5 ? 2
+                            : d.count <= max * 0.75 ? 3 : 4;
+                        const label = d.date + (d.count ? ': ' + d.count + ' открытий' : '');
+                        return `<div class="heatmap-cell" data-level="${level}" title="${label}"></div>`;
+                    }).join('')}</div>`
+                ).join('');
+
+                // Streak calculation
+                let streak = 0, maxStreak = 0, cur = 0;
+                const today = new Date().toISOString().slice(0,10);
+                for (let i = days.length - 1; i >= 0; i--) {
+                    if (days[i].count > 0) {
+                        cur++;
+                        if (i === days.length - 1 || days[i+1].count > 0) streak = cur;
+                    } else {
+                        maxStreak = Math.max(maxStreak, cur);
+                        cur = 0;
+                    }
+                }
+                maxStreak = Math.max(maxStreak, cur);
+                const total = days.reduce((s, d) => s + d.count, 0);
+                const streakEl = document.getElementById('heatmap-streak');
+                if (streakEl) streakEl.innerHTML =
+                    `<span>${streak}</span> сер. · <span>${total}</span> всего`;
+            } catch(e) {}
+        }
+        // ── END LIVE & HEATMAP ─────────────────────────────────────────────
 
         // Initialize Lucide icons
         lucide.createIcons();
