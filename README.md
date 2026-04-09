@@ -1,6 +1,6 @@
 # 🗂 ProjectHub
 
-> The developer dashboard you always wanted. Manage all your local projects — open editors, track Git, monitor Docker, and log AI memory. All from a self-hosted web UI.
+> Your self-hosted AI-powered developer hub. Manage all local projects, connect any AI IDE in one click, track Git & Docker, and give your AI agent persistent memory across sessions.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Habartru/projecthub/main/install.sh | bash
@@ -16,7 +16,9 @@ Then open **http://localhost:8472**
 |------|-------|
 | ![Dark theme](docs/assets/screenshot-dark.png) | ![Light theme](docs/assets/screenshot-light.png) |
 
-![Modal](docs/assets/screenshot-modal.png)
+| Project Modal | Connect to IDE |
+|---------------|----------------|
+| ![Modal](docs/assets/screenshot-modal.png) | ![Connect IDE](docs/assets/screenshot-connect.png) |
 
 ---
 
@@ -24,25 +26,83 @@ Then open **http://localhost:8472**
 
 ### 🗂 Project Dashboard
 
-- **Auto-discovery** — scans `~/Projects/` recursively, groups by category
+- **Auto-discovery** — scans `~/Projects/` recursively, groups by `@category`
 - **Smart cards** — language icon, open count, last-opened time-ago
 - **LIVE badges** — animated green pulse on cards with running Docker containers, polls every 15s
-- **Activity heatmap** — 84-day GitHub-style bar in the sticky nav (always visible while scrolling)
+- **Activity heatmap** — 84-day GitHub-style bar in sticky nav (always visible while scrolling)
 - **One-click launch** — open in Windsurf, VS Code, or any custom editor
 - **Sorting** — by name / activity / status / favorite / custom drag order
 - **Labels** — ★ Favorite · ▶ In Progress · ◼ Archive
 
-### 🧠 AI Brain (Knowledge Base)
+### 🔌 Connect to IDE — one-click MCP setup
 
-- MCP server with 3 tools: `log_session_insight`, `get_project_context`, `compile_knowledge`
-- Insights stored as structured Markdown — **Obsidian-compatible vault**
-- **Brain tab** in dashboard — browse articles by project, full-text search
-- **Log Insight modal** — type, tags, content, all without leaving the browser
+**New!** Go to **Settings → Connect IDE** — ProjectHub detects all installed AI editors and injects the MCP config automatically.
+
+![Connect IDE](docs/assets/screenshot-connect.png)
+
+Supported editors (auto-detected):
+
+| Editor | | Editor | |
+|--------|-|--------|-|
+| Windsurf | Codeium Cascade | Qoder | qoder.com |
+| Cursor | Cursor AI | Claude Code | Anthropic CLI |
+| VS Code | + Copilot | AntiGravity | antigravity.ai |
+| Zed | AI Assistant | Neovim | mcphub.nvim |
+| JetBrains | IDEA/PyCharm/WS | Continue | continue.dev |
+| Aider | CLI pair programmer | Void | open-source Cursor alt |
+| Trae | ByteDance IDE | Gemini CLI | Google CLI |
+| OpenCode | terminal agent | | |
+
+- Click **Connect** → MCP config injected automatically
+- Click **Disconnect** → config removed cleanly
+- Shows config file path for each IDE
+- **Manual setup** JSON with copy button for unsupported editors
+
+### 🧠 AI Brain — persistent memory across sessions
+
+The MCP server gives your AI agent a full memory of every project:
+
+| Tool | What it does |
+|------|-------------|
+| `list_all_projects` | List all projects (prevents hallucinations) |
+| `get_project_details` | Full info: git, docker, deps, type |
+| `get_project_dependencies` | Dependencies for a specific project |
+| `get_project_history` | **Full git log + session insights** for any time period |
+| `get_project_context` | Load accumulated knowledge at session start |
+| `log_session_insight` | Save decisions, bugs, patterns to knowledge base |
+| `compile_knowledge` | Compile daily logs into permanent articles |
+| `get_docker_status` | Live Docker container status |
+| `get_databases` | PostgreSQL database list |
+| `get_system_status` | Overall system health |
+| `compare_projects` | Side-by-side project comparison |
+| `read_project_file` | Read any project file (read-only, secure) |
+
+#### `get_project_history` — the AI knows everything
+
+```
+# Full history (no limits)
+get_project_history("myproject")
+
+# Specific period
+get_project_history("myproject", date_from="2026-01-01", date_to="2026-04-09")
+
+# Only git, no memory
+get_project_history("myproject", include_insights=false)
+
+# Unlimited commits
+get_project_history("myproject", max_commits=0)
+```
+
+Returns git commits + saved session insights merged chronologically. The AI gets the full picture of a project developed over months.
+
+- **Brain tab** in dashboard — browse knowledge articles, full-text search
+- **Log Insight modal** — type, tags, content, without leaving the browser
 - Insight types: `decision` · `bug` · `pattern` · `gotcha` · `stack` · `qa`
+- **Obsidian-compatible vault** at `~/Projects/@memory/brain/`
 
 ### 🐳 Docker & Git
 
-- Per-project Docker container list with live status badges
+- Per-project Docker container list with live status
 - Git branch, uncommitted changes, last commit message
 - LIVE detection — cards glow green when containers are running
 
@@ -51,9 +111,14 @@ Then open **http://localhost:8472**
 - Real-time CPU, RAM, Disk, Uptime in sidebar
 - Smart polling — pauses when tab is hidden
 
-### 🎨 Themes
+### � Internationalization
 
-- **Dark** (default) · **Light** · **Midnight** OLED
+- **Russian** · **English** · **Chinese (中文)** — full UI translation
+- Instant language switch — no reload required
+
+### �🎨 Themes
+
+- **Dark** (default) · **Light** · **Midnight OLED**
 
 ---
 
@@ -68,144 +133,87 @@ Then open **http://localhost:8472**
 | Docker | any | optional, for LIVE badges |
 | Obsidian | any | optional, for Brain vault UI |
 
-### Step 2 — Clone & Run Dashboard
+### Step 2 — One-line install (recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Habartru/projecthub/main/install.sh | bash
+```
+
+The script automatically:
+- Checks Python 3.10+, installs `python3-venv` if needed
+- Clones repo, creates venv, installs dependencies
+- Sets up MCP server
+- Creates systemd autostart service
+- Optionally adds Obsidian autostart (opens `@memory` vault)
+- Starts the dashboard and opens browser
+
+### Step 3 — Manual install
 
 ```bash
 git clone https://github.com/Habartru/projecthub.git
 cd projecthub
 
 python -m venv venv
-source venv/bin/activate          # Linux/macOS
-# venv\Scripts\activate           # Windows
-
+source venv/bin/activate
 pip install -r backend/requirements.txt
 python backend/main.py
 ```
 
-Open **http://localhost:8472** — done. Dashboard starts scanning `~/Projects/` immediately.
+Open **http://localhost:8472**
 
-> **Want a different projects root?** Edit `PROJECTS_ROOT` at the top of `backend/main.py`.
+### Step 4 — Connect your AI editor
 
----
+Go to **Settings → Connect IDE** in the dashboard. ProjectHub will:
+1. Scan for installed editors
+2. Show connection status for each
+3. Inject MCP config on click
 
-### Step 3 — Configure Editors (optional)
-
-Go to **http://localhost:8472/static/settings.html** → Editors tab.
-
-By default Windsurf and VS Code are pre-configured. To add a custom editor:
-
-- **Command:** the binary name, e.g. `cursor`, `idea`, `zed`
-- **Args template:** `{path}` is replaced with the project path
-- **Color:** button accent color (hex)
-- **Icon:** path to a `.png` icon (optional)
-
----
-
-### Step 4 — AI Brain + MCP Server
-
-The Brain is an **MCP server** that your AI agent (Claude Code, Windsurf Cascade, etc.) connects to. It gives the AI persistent memory across sessions.
-
-#### 4a. Install the MCP server
-
-```bash
-cd mcp-server
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-#### 4b. Register in your AI client
-
-**Windsurf / Cascade** — edit `~/.config/Qoder/User/mcp.json`:
+Or manually edit your IDE's MCP config:
 
 ```json
 {
   "mcpServers": {
     "project-context": {
-      "command": "/absolute/path/to/projecthub/mcp-server/.venv/bin/python",
-      "args": ["/absolute/path/to/projecthub/mcp-server/server.py"]
+      "command": "/path/to/projecthub/mcp-server/.venv/bin/python",
+      "args": ["/path/to/projecthub/mcp-server/server.py"]
     }
   }
 }
 ```
 
-**Claude Code** — edit `~/.claude/mcp_servers.json` (same format).
-
-**Cursor** — Settings → MCP → Add server (same JSON).
-
 > ⚠️ Use **absolute paths** — no `~` or relative paths in MCP configs.
 
-#### 4c. Verify it works
+Config file locations:
 
-Restart your AI client. In a new chat, ask:
+| Editor | Config path |
+|--------|------------|
+| Windsurf | `~/.config/Windsurf/User/mcp.json` |
+| Qoder | `~/.config/Qoder/User/mcp.json` |
+| Cursor | `~/.cursor/mcp.json` |
+| Claude Code | `~/.claude/mcp_servers.json` |
+| VS Code | `~/.config/Code/User/mcp.json` |
+| AntiGravity | `~/.config/Antigravity/User/mcp.json` |
+| Zed | `~/.config/zed/settings.json` → `context_servers` |
 
-```
-Use the project-context MCP tool to get context for project "myproject"
-```
+### Step 5 — Verify AI connection
 
-If it responds with project knowledge — Brain is connected.
-
-#### 4d. Available MCP tools
-
-| Tool | What it does |
-|------|-------------|
-| `log_session_insight` | Save a decision, bug fix, or pattern to the knowledge base |
-| `get_project_context` | Load all saved knowledge for a project at session start |
-| `compile_knowledge` | Compile daily logs into permanent project articles |
-
----
-
-### Step 5 — Obsidian (optional but recommended)
-
-Obsidian is **not required** — the Brain works without it. But it lets you visually browse and edit the knowledge vault with a beautiful graph view.
-
-#### Where the vault lives
+Restart your IDE. In a new chat, ask:
 
 ```
-~/Projects/@memory/brain/
-├── knowledge/
-│   ├── index.md              # Auto-generated index of all articles
-│   └── projects/
-│       ├── myproject.md      # Per-project knowledge article
-│       └── ...
-└── logs/
-    └── 2026-04-09.md         # Daily log (auto-created by MCP)
+Use get_project_context to load context for "myproject"
 ```
 
-#### Opening in Obsidian
+Or test history:
 
-1. Download Obsidian from **https://obsidian.md** (free)
-2. Open Obsidian → **Open folder as vault**
-3. Select `~/Projects/@memory/brain/`
-4. Done — all knowledge articles appear in the file explorer
-
-> The vault path is configured in `mcp-server/server.py` as `MEMORY_DIR`. Change it if your `@memory` folder is elsewhere.
-
----
-
-### Step 6 — Autostart (optional)
-
-**systemd (Linux):**
-
-```ini
-# ~/.config/systemd/user/projecthub.service
-[Unit]
-Description=ProjectHub Dashboard
-
-[Service]
-WorkingDirectory=/path/to/projecthub
-ExecStart=/path/to/projecthub/venv/bin/python backend/main.py
-Restart=on-failure
-
-[Install]
-WantedBy=default.target
+```
+Use get_project_history to show me everything that changed in "myproject" this month
 ```
 
-```bash
-systemctl --user enable --now projecthub
-```
+### Step 6 — Obsidian vault (optional)
 
-> The one-line installer handles all of this automatically.
+1. Download from **https://obsidian.md**
+2. Open → **Open folder as vault** → select `~/Projects/@memory/brain/`
+3. All knowledge articles appear in the file explorer with graph view
 
 ---
 
@@ -214,17 +222,18 @@ systemctl --user enable --now projecthub
 ```
 projecthub/
 ├── backend/
-│   ├── main.py            # FastAPI — all REST endpoints
+│   ├── main.py              # FastAPI — REST API + MCP connect endpoints
 │   ├── static/
-│   │   └── index.html     # Single-page dashboard (Vanilla JS + Lucide Icons)
-│   └── projecthub.db      # SQLite — projects, notes, settings, labels
+│   │   ├── index.html       # Dashboard SPA (Vanilla JS + Lucide Icons)
+│   │   └── settings.html    # Settings: General, Appearance, Editors, Connect IDE
+│   └── projecthub.db        # SQLite — projects, notes, settings, translations
 └── mcp-server/
-    └── server.py          # MCP server — Brain tools for AI agents
+    └── server.py            # MCP server — 12 tools for AI agents
 ```
 
-**Backend:** FastAPI · SQLite · Docker SDK · subprocess (Git)
-**Frontend:** Vanilla JS · Lucide Icons · CSS Variables (3 themes)
-**MCP:** Python MCP SDK · Markdown vault (Obsidian-compatible)
+**Backend:** FastAPI · SQLite · subprocess (Git/Docker)
+**Frontend:** Vanilla JS · Lucide Icons · CSS Variables (3 themes) · i18n (ru/en/zh)
+**MCP:** Python MCP SDK · Markdown vault (Obsidian-compatible) · 12 tools
 **Zero external services** — everything runs on localhost
 
 ---
@@ -243,12 +252,15 @@ projecthub/
 | `POST /api/brain/log` | Log new insight |
 | `GET /api/brain/search?q=` | Full-text search |
 | `GET /api/system` | CPU / RAM / Disk / Uptime |
+| `GET /api/mcp/detect` | Scan installed IDEs + connection status |
+| `POST /api/mcp/connect/{ide}` | Inject MCP config into IDE |
+| `DELETE /api/mcp/connect/{ide}` | Remove MCP config from IDE |
 
 ---
 
 ## Русский
 
-**ProjectHub** — самохостируемый дашборд для управления локальными проектами разработчика.
+**ProjectHub** — самохостируемый AI-дашборд для управления локальными проектами разработчика.
 
 ### Установка одной командой
 
@@ -256,30 +268,40 @@ projecthub/
 curl -fsSL https://raw.githubusercontent.com/Habartru/projecthub/main/install.sh | bash
 ```
 
-Скрипт сам: проверит Python 3.10+, клонирует репо, создаст venv, установит зависимости, пропишет MCP в конфиг твоего AI-клиента (Windsurf/Claude Code/Cursor), создаст systemd сервис и запустит браузер.
+Скрипт автоматически: проверит Python 3.10+, клонирует репо, создаст venv, установит зависимости, настроит MCP сервер, создаст systemd сервис, опционально добавит Obsidian в автозапуск и откроет браузер.
+
+### Что нового
+
+- **Connect IDE** — подключи MCP к любому из 14 поддерживаемых редакторов одной кнопкой прямо из дашборда
+- **get_project_history** — AI получает полную историю проекта: все git коммиты + сохранённые инсайты за любой период
+- **12 MCP инструментов** — полный контекст системы для AI агента
+- **Интерфейс на 3 языках** — русский, английский, китайский
 
 ### Как это работает
 
 1. Запускаешь `python backend/main.py` — FastAPI стартует на порту 8472
-2. Открываешь `http://localhost:8472` — дашборд автоматически находит все проекты из `~/Projects/`
-3. **LIVE-бейдж** (зелёный пульс) — на карточках проектов с запущенными Docker контейнерами, обновляется каждые 15 секунд
-4. **Activity Heatmap** в sticky панели навигации — 84-дневный график, всегда виден при прокрутке
-5. Кликаешь на карточку — Git ветка, коммит, Docker контейнеры, заметки
-6. Кнопки редакторов открывают проект в Windsurf / VS Code
+2. Открываешь `http://localhost:8472` — дашборд находит все проекты из `~/Projects/`
+3. **Settings → Connect IDE** — выбираешь редактор, жмёшь "Подключить", перезапускаешь IDE
+4. AI агент получает доступ к 12 инструментам: проекты, Docker, Git история, память сессий
+5. `get_project_history` — AI понимает что и когда менялось за всё время разработки
 
 ### AI Brain
 
-- **MCP сервер** — подключается к любому AI-агенту
-- `log_session_insight` → инсайт записывается в Markdown
-- `get_project_context` → возвращает всю базу знаний по проекту
-- **Вкладка Brain** в дашборде — просмотр и поиск по всем статьям
-- Совместимо с **Obsidian** — открывай `~/Projects/@memory/brain/` как vault
+- `log_session_insight` → инсайт записывается в Markdown (Obsidian vault)
+- `get_project_context` → вся база знаний по проекту одним вызовом
+- `get_project_history` → полная история: git + инсайты за любой период
+- **Вкладка Brain** — просмотр и поиск по всем статьям
+- Совместимо с **Obsidian** — `~/Projects/@memory/brain/`
+
+### Поддерживаемые IDE
+
+Windsurf · Qoder · Cursor · Claude Code · VS Code · AntiGravity · Zed · Neovim · JetBrains · Continue · Aider · Void · Trae · Gemini CLI · OpenCode
 
 ---
 
 ## 中文
 
-**ProjectHub** 是一个面向开发者的自托管本地项目管理仪表板。
+**ProjectHub** 是一个面向开发者的自托管 AI 项目管理仪表板。
 
 ### 一键安装
 
@@ -287,21 +309,30 @@ curl -fsSL https://raw.githubusercontent.com/Habartru/projecthub/main/install.sh
 curl -fsSL https://raw.githubusercontent.com/Habartru/projecthub/main/install.sh | bash
 ```
 
-安装脚本会自动：检查 Python 3.10+、克隆仓库、创建虚拟环境、安装依赖、注册 MCP 配置（Windsurf/Claude Code/Cursor）、创建 systemd 服务并打开浏览器。
+### 新功能
+
+- **Connect IDE** — 一键将 MCP 连接到 14 款主流 AI 编辑器
+- **get_project_history** — AI 获取项目完整历史：git 提交 + 会话洞察，支持任意时间段查询
+- **12 个 MCP 工具** — 为 AI 智能体提供完整系统上下文
+- **三语言界面** — 中文、英文、俄文
 
 ### 主要功能
 
 - 自动发现 `~/Projects/` 下的所有项目，按类别分组
 - **LIVE 徽章** — 有运行中 Docker 容器的项目显示绿色脉冲动画
 - **活动热力图** — 84天记录，固定在导航栏顶部
-- 一键在 Windsurf / VS Code 中打开项目
+- **Settings → Connect IDE** — 自动检测已安装的编辑器并注入 MCP 配置
 - **Brain 标签** — AI 知识库，兼容 Obsidian
+
+### 支持的编辑器
+
+Windsurf · Qoder · Cursor · Claude Code · VS Code · AntiGravity · Zed · Neovim · JetBrains · Continue · Aider · Void · Trae · Gemini CLI · OpenCode
 
 ---
 
 ## Deutsch
 
-**ProjectHub** ist ein selbst gehostetes Dashboard zur Verwaltung lokaler Entwicklungsprojekte.
+**ProjectHub** ist ein selbst gehostetes AI-Dashboard zur Verwaltung lokaler Entwicklungsprojekte.
 
 ### Ein-Befehl-Installation
 
@@ -309,14 +340,19 @@ curl -fsSL https://raw.githubusercontent.com/Habartru/projecthub/main/install.sh
 curl -fsSL https://raw.githubusercontent.com/Habartru/projecthub/main/install.sh | bash
 ```
 
-Das Skript erledigt automatisch: Python 3.10+ prüfen, Repository klonen, venv erstellen, Abhängigkeiten installieren, MCP in AI-Client-Konfiguration eintragen (Windsurf/Claude Code/Cursor), systemd-Service erstellen und Browser öffnen.
+### Neue Funktionen
+
+- **Connect IDE** — MCP mit einem Klick in 14 AI-Editoren einrichten
+- **get_project_history** — KI erhält vollständige Projekthistorie: Git-Commits + Session-Insights für beliebige Zeiträume
+- **12 MCP-Werkzeuge** — vollständiger Systemkontext für KI-Agenten
+- **3 Sprachen** — Deutsch, Englisch, Russisch, Chinesisch
 
 ### Funktionen
 
 - Automatische Projekterkennung aus `~/Projects/`
 - **LIVE-Badges** — grüner Puls bei laufenden Docker-Containern
 - **Aktivitäts-Heatmap** — 84 Tage, fest in der Navigationsleiste
-- Ein-Klick-Start in Windsurf / VS Code
+- **Connect IDE** — automatische MCP-Konfiguration für alle gängigen KI-Editoren
 - **Brain-Tab** — KI-Wissensdatenbank, Obsidian-kompatibel
 
 ---
