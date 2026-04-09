@@ -744,6 +744,54 @@ Reads all unprocessed daily log entries and merges them into permanent knowledge
                 "required": []
             }
         ),
+        Tool(
+            name="get_project_history",
+            description="""Get full development history of a project: git commits + saved session insights.
+
+Use this to understand:
+- What changed in the project over any time period
+- Why decisions were made (from logged insights)
+- Bugs that were fixed and when
+- The full timeline of development
+
+Parameters allow flexible querying:
+- No dates = FULL history (all time)
+- date_from only = from that date to now
+- date_to only = everything up to that date
+- Both = specific period
+
+Git log and memory insights are merged chronologically.""",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "project_name": {
+                        "type": "string",
+                        "description": "Project name: 'category/name' or just 'name'"
+                    },
+                    "date_from": {
+                        "type": "string",
+                        "description": "Start date ISO format: YYYY-MM-DD (optional, omit for full history)"
+                    },
+                    "date_to": {
+                        "type": "string",
+                        "description": "End date ISO format: YYYY-MM-DD (optional, omit for today)"
+                    },
+                    "include_git": {
+                        "type": "boolean",
+                        "description": "Include git commit history (default: true)"
+                    },
+                    "include_insights": {
+                        "type": "boolean",
+                        "description": "Include saved session insights from memory (default: true)"
+                    },
+                    "max_commits": {
+                        "type": "integer",
+                        "description": "Max number of git commits to return (default: 200, use 0 for unlimited)"
+                    }
+                },
+                "required": ["project_name"]
+            }
+        ),
     ]
 
 
@@ -1058,6 +1106,109 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                     + "\n".join(compiled)
                     + f"\n\nIndex updated: {INDEX_FILE}"
                 )
+            )]
+
+        elif name == "get_project_history":
+            project_name = arguments.get("project_name", "")
+            date_from = arguments.get("date_from", "")
+            date_to = arguments.get("date_to", "")
+            include_git = arguments.get("include_git", True)
+            include_insights = arguments.get("include_insights", True)
+            max_commits = arguments.get("max_commits", 200)
+
+            exists, error, key, path = ProjectContext.validate_project(project_name)
+            if not exists:
+                return [TextContent(type="text", text=error)]
+
+            result = {
+                "project": key,
+                "date_from": date_from or "beginning",
+                "date_to": date_to or "now",
+                "git_commits": [],
+                "memory_insights": [],
+                "summary": {}
+            }
+
+            # ── Git history ────────────────────────────────────────
+            if include_git and (path / ".git").exists():
+                git_cmd = [
+                    "git", "log",
+                    "--pretty=format:%H|%ai|%an|%s",
+                    "--no-merges"
+                ]
+                if date_from:
+                    git_cmd += [f"--after={date_from}"]
+                if date_to:
+                    git_cmd += [f"--before={date_to} 23:59:59"]
+                if max_commits and max_commits > 0:
+                    git_cmd += [f"-{max_commits}"]
+
+                try:
+                    r = subprocess.run(
+                        git_cmd, cwd=path,
+                        capture_output=True, text=True, timeout=15
+                    )
+                    for line in r.stdout.strip().splitlines():
+                        if not line:
+                            continue
+                        parts = line.split("|", 3)
+                        if len(parts) == 4:
+                            sha, date, author, msg = parts
+                            result["git_commits"].append({
+                                "sha": sha[:8],
+                                "date": date[:10],
+                                "time": date[11:16],
+                                "author": author,
+                                "message": msg
+                            })
+                except Exception as e:
+                    result["git_error"] = str(e)
+
+            # ── Memory insights from daily logs ────────────────────
+            if include_insights and DAILY_DIR.exists():
+                entry_pattern = re.compile(
+                    r"## \[(\d{2}:\d{2})\] (.+?)\n\*\*Type:\*\* (.+?)  \n\*\*Tags:\*\* (.*?)  \n\n(.*?)\n\n---",
+                    re.DOTALL
+                )
+                for log_file in sorted(DAILY_DIR.glob("*.md")):
+                    log_date = log_file.stem  # YYYY-MM-DD
+                    if date_from and log_date < date_from:
+                        continue
+                    if date_to and log_date > date_to:
+                        continue
+                    try:
+                        content = log_file.read_text()
+                        for m in entry_pattern.finditer(content):
+                            time_str, proj, itype, tags_raw, body = m.groups()
+                            if key not in proj and project_name not in proj:
+                                continue
+                            tags = [t.lstrip("#") for t in tags_raw.split() if t.startswith("#")]
+                            result["memory_insights"].append({
+                                "date": log_date,
+                                "time": time_str,
+                                "type": itype,
+                                "tags": tags,
+                                "content": body.strip()
+                            })
+                    except Exception:
+                        continue
+
+                # Also check compiled knowledge article
+                knowledge_path = get_project_knowledge_path(key)
+                if knowledge_path.exists():
+                    result["compiled_knowledge"] = knowledge_path.read_text()
+
+            result["summary"] = {
+                "total_commits": len(result["git_commits"]),
+                "total_insights": len(result["memory_insights"]),
+                "has_compiled_knowledge": "compiled_knowledge" in result,
+                "earliest_commit": result["git_commits"][-1]["date"] if result["git_commits"] else None,
+                "latest_commit": result["git_commits"][0]["date"] if result["git_commits"] else None,
+            }
+
+            return [TextContent(
+                type="text",
+                text=ProjectContext.format_response(key, path, result)
             )]
 
         else:
