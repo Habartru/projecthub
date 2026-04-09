@@ -179,11 +179,22 @@ def init_db():
         )
     ''')
 
+    # Activity log for heatmap (tracks every open, not just last_opened)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS activity_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            project_id INTEGER NOT NULL,
+            opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+        )
+    ''')
+
     # Indexes
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_projects_path ON projects(path)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_projects_category ON projects(category)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_notes_project_id ON notes(project_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_commands_project_id ON commands(project_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_activity_log_opened_at ON activity_log(opened_at)")
 
     # Migrate existing DB: recreate notes/commands with ON DELETE CASCADE
     _migrate_cascade(cursor)
@@ -1279,11 +1290,12 @@ def open_project(project_id: int):
     cursor = conn.cursor()
     
     cursor.execute('''
-        UPDATE projects 
+        UPDATE projects
         SET open_count = open_count + 1, last_opened = CURRENT_TIMESTAMP
         WHERE id = ?
     ''', (project_id,))
-    
+    cursor.execute("INSERT INTO activity_log (project_id) VALUES (?)", (project_id,))
+
     conn.commit()
     conn.close()
     return {"status": "ok"}
@@ -1497,13 +1509,14 @@ def launch_project(project_id: int, editor: str = "windsurf"):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
-        UPDATE projects 
+        UPDATE projects
         SET open_count = open_count + 1, last_opened = CURRENT_TIMESTAMP
         WHERE id = ?
     ''', (project_id,))
+    cursor.execute("INSERT INTO activity_log (project_id) VALUES (?)", (project_id,))
     conn.commit()
     conn.close()
-    
+
     return {"status": "launched", "path": path, "editor": editor}
 
 @app.get("/api/projects/{project_id}/docker")
@@ -2154,17 +2167,31 @@ def activity_heatmap():
     """Return daily open counts for last 84 days (12 weeks) for heatmap."""
     conn = get_db()
     cursor = conn.cursor()
+    # Use activity_log for accurate per-open tracking
     cursor.execute("""
-        SELECT DATE(last_opened) as day, COUNT(*) as count
-        FROM projects
-        WHERE last_opened IS NOT NULL
-          AND last_opened >= DATE('now', '-84 days')
-        GROUP BY DATE(last_opened)
+        SELECT DATE(opened_at) as day, COUNT(*) as count
+        FROM activity_log
+        WHERE opened_at >= DATE('now', '-84 days')
+        GROUP BY DATE(opened_at)
         ORDER BY day
     """)
     rows = cursor.fetchall()
-    conn.close()
     data = {row[0]: row[1] for row in rows}
+
+    # Fallback: if activity_log is empty, use old projects.last_opened data
+    if not data:
+        cursor.execute("""
+            SELECT DATE(last_opened) as day, COUNT(*) as count
+            FROM projects
+            WHERE last_opened IS NOT NULL
+              AND last_opened >= DATE('now', '-84 days')
+            GROUP BY DATE(last_opened)
+            ORDER BY day
+        """)
+        rows = cursor.fetchall()
+        data = {row[0]: row[1] for row in rows}
+
+    conn.close()
 
     # Fill all 84 days
     from datetime import date, timedelta

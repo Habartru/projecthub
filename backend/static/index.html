@@ -2202,18 +2202,19 @@
                     return '<div class="heatmap-col"><div class="heatmap-cell" data-level="' + level + '" title="' + tip + '"></div></div>';
                 }).join('');
 
-                // Streak: consecutive days from today backwards
-                let streak = 0, cur = 0;
+                // Streak: consecutive days with activity, counting backwards from today
+                let streak = 0;
                 for (let i = days.length - 1; i >= 0; i--) {
-                    if (days[i].count > 0) { cur++; if (i === days.length - 1) streak = cur; else if (streak > 0) streak = cur; }
-                    else { if (i === days.length - 1) { streak = 0; } cur = 0; }
+                    if (days[i].count > 0) streak++;
+                    else break;
                 }
-                streak = cur;
                 const total = days.reduce((s, d) => s + d.count, 0);
                 const streakEl = document.getElementById('heatmap-streak');
                 if (streakEl) streakEl.innerHTML =
                     (streak > 0 ? '<span>' + streak + '</span> дн. подряд &nbsp;·&nbsp; ' : '') + '<span>' + total + '</span> открытий за 12 нед.';
-            } catch(e) {}
+            } catch(e) {
+                console.warn('Heatmap load failed:', e);
+            }
         }
         // ── END LIVE & HEATMAP ─────────────────────────────────────────────
 
