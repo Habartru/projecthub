@@ -2168,11 +2168,12 @@ def activity_heatmap():
     conn = get_db()
     cursor = conn.cursor()
     # Use activity_log for accurate per-open tracking
+    # Use localtime to match Python's date.today()
     cursor.execute("""
-        SELECT DATE(opened_at) as day, COUNT(*) as count
+        SELECT DATE(opened_at, 'localtime') as day, COUNT(*) as count
         FROM activity_log
         WHERE opened_at >= DATE('now', '-84 days')
-        GROUP BY DATE(opened_at)
+        GROUP BY DATE(opened_at, 'localtime')
         ORDER BY day
     """)
     rows = cursor.fetchall()
@@ -2181,11 +2182,11 @@ def activity_heatmap():
     # Fallback: if activity_log is empty, use old projects.last_opened data
     if not data:
         cursor.execute("""
-            SELECT DATE(last_opened) as day, COUNT(*) as count
+            SELECT DATE(last_opened, 'localtime') as day, COUNT(*) as count
             FROM projects
             WHERE last_opened IS NOT NULL
               AND last_opened >= DATE('now', '-84 days')
-            GROUP BY DATE(last_opened)
+            GROUP BY DATE(last_opened, 'localtime')
             ORDER BY day
         """)
         rows = cursor.fetchall()
