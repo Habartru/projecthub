@@ -17,6 +17,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 import docker
@@ -69,10 +70,16 @@ class SettingValue(BaseModel):
     category: str = "general"
 
 # Инициализация БД
-def init_db():
+def get_db():
+    """Get database connection with foreign keys enabled."""
     conn = sqlite3.connect(DB_PATH)
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+def init_db():
+    conn = get_db()
     cursor = conn.cursor()
-    
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS projects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,17 +98,17 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-    
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS notes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             project_id INTEGER NOT NULL,
             content TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (project_id) REFERENCES projects (id)
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
         )
     ''')
-    
+
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS commands (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -110,7 +117,7 @@ def init_db():
             command TEXT NOT NULL,
             cwd TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (project_id) REFERENCES projects (id)
+            FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
         )
     ''')
     
@@ -172,6 +179,15 @@ def init_db():
         )
     ''')
 
+    # Indexes
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_projects_path ON projects(path)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_projects_category ON projects(category)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_notes_project_id ON notes(project_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_commands_project_id ON commands(project_id)")
+
+    # Migrate existing DB: recreate notes/commands with ON DELETE CASCADE
+    _migrate_cascade(cursor)
+
     # Инициализация дефолтных редакторов
     init_default_editors(cursor)
 
@@ -180,9 +196,53 @@ def init_db():
 
     # Инициализация категорий из файловой системы
     init_categories(cursor)
-    
+
     conn.commit()
     conn.close()
+
+def _migrate_cascade(cursor):
+    """Migrate notes/commands tables to add ON DELETE CASCADE (one-time)."""
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='_migration_done'")
+    if cursor.fetchone():
+        return
+    # Check if tables have data worth migrating
+    cursor.execute("SELECT COUNT(*) FROM notes")
+    notes_count = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM commands")
+    commands_count = cursor.fetchone()[0]
+    if notes_count > 0 or commands_count > 0:
+        # Recreate with CASCADE
+        for table in ('notes', 'commands'):
+            cursor.execute(f"ALTER TABLE {table} RENAME TO _{table}_old")
+        cursor.execute('''
+            CREATE TABLE notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE commands (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                command TEXT NOT NULL,
+                cwd TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+            )
+        ''')
+        cursor.execute("INSERT INTO notes SELECT * FROM _notes_old")
+        cursor.execute("INSERT INTO commands SELECT * FROM _commands_old")
+        cursor.execute("DROP TABLE _notes_old")
+        cursor.execute("DROP TABLE _commands_old")
+        # Recreate indexes after table rebuild
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_notes_project_id ON notes(project_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_commands_project_id ON commands(project_id)")
+    cursor.execute("CREATE TABLE IF NOT EXISTS _migration_done (id INTEGER PRIMARY KEY)")
+    cursor.execute("INSERT OR IGNORE INTO _migration_done VALUES (1)")
 
 def init_default_editors(cursor):
     """Инициализация дефолтных редакторов если их нет"""
@@ -1038,7 +1098,7 @@ def detect_project_type(project_dir: Path) -> str:
 
 def sync_projects():
     """Синхронизация проектов с БД (с обновлением типов и удалением несуществующих)"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
 
     scanned = scan_projects()
@@ -1051,9 +1111,8 @@ def sync_projects():
 
     for proj_id, name, path in existing_projects:
         if path not in scanned_by_path or not os.path.exists(path):
+            # CASCADE deletes notes and commands automatically
             cursor.execute("DELETE FROM projects WHERE id = ?", (proj_id,))
-            cursor.execute("DELETE FROM notes WHERE project_id = ?", (proj_id,))
-            cursor.execute("DELETE FROM commands WHERE project_id = ?", (proj_id,))
 
     for proj in scanned:
         # Проверяем по пути (более надёжно чем по имени)
@@ -1094,6 +1153,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="ProjectHub", lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://127.0.0.1:8472", "http://localhost:8472"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # API Endpoints
 @app.get("/api/projects")
 def get_projects(
@@ -1103,7 +1169,7 @@ def get_projects(
     sort: Optional[str] = Query("name")  # name, activity, status, favorite, custom
 ):
     """Получить список проектов с сортировкой"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
@@ -1153,7 +1219,7 @@ def api_sync_projects():
     try:
         sync_projects()
         # Получаем статистику после синхронизации
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM projects")
         total = cursor.fetchone()[0]
@@ -1171,21 +1237,21 @@ def get_live_projects():
         running = {c.name.lower(): c for c in client.containers.list()}
         if not running:
             return {"live": []}
-        conn = sqlite3.connect(DB_PATH)
+        conn = get_db()
         cursor = conn.cursor()
         cursor.execute("SELECT id, name FROM projects")
         for pid, name in cursor.fetchall():
             if any(name.lower() in cname for cname in running):
                 live_ids.append(pid)
         conn.close()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Failed to get live projects (Docker may not be running): %s", e)
     return {"live": live_ids}
 
 @app.get("/api/projects/{project_id}")
 def get_project(project_id: int):
     """Получить детали проекта"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
@@ -1209,7 +1275,7 @@ def get_project(project_id: int):
 @app.post("/api/projects/{project_id}/open")
 def open_project(project_id: int):
     """Открыть проект (обновить статистику)"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     
     cursor.execute('''
@@ -1225,7 +1291,7 @@ def open_project(project_id: int):
 @app.post("/api/projects/{project_id}/notes")
 def add_note(project_id: int, note: Note):
     """Добавить заметку к проекту"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     
     cursor.execute(
@@ -1255,7 +1321,7 @@ class CategoryUpdate(BaseModel):
 @app.get("/api/categories")
 def get_categories():
     """Получить все категории с количеством проектов"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 
@@ -1275,7 +1341,7 @@ def get_categories():
 @app.post("/api/categories")
 def create_category(cat: CategoryCreate):
     """Создать новую категорию"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
 
     # Получаем максимальный sort_order
@@ -1299,7 +1365,7 @@ def create_category(cat: CategoryCreate):
 @app.put("/api/categories/{cat_id}")
 def update_category(cat_id: int, cat: CategoryUpdate):
     """Обновить категорию"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
 
     updates = []
@@ -1327,7 +1393,7 @@ def update_category(cat_id: int, cat: CategoryUpdate):
 @app.delete("/api/categories/{cat_id}")
 def delete_category(cat_id: int):
     """Удалить категорию (проекты не удаляются, только обнуляется привязка)"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
 
     # Получаем имя категории
@@ -1353,7 +1419,7 @@ def set_project_category(project_id: int, data: dict):
     if not category:
         raise HTTPException(status_code=400, detail="Category is required")
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
 
     cursor.execute("SELECT id FROM projects WHERE id = ?", (project_id,))
@@ -1369,7 +1435,7 @@ def set_project_category(project_id: int, data: dict):
 @app.get("/api/stats")
 def get_stats():
     """Статистика по проектам"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     
     cursor.execute("SELECT COUNT(*) FROM projects")
@@ -1392,7 +1458,7 @@ def get_stats():
 @app.post("/api/projects/{project_id}/launch")
 def launch_project(project_id: int, editor: str = "windsurf"):
     """Запустить проект в редакторе (windsurf или antigravity)"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
 
     cursor.execute("SELECT path FROM projects WHERE id = ?", (project_id,))
@@ -1419,7 +1485,7 @@ def launch_project(project_id: int, editor: str = "windsurf"):
     args_template = editor_row[1] or '{path}'
 
     # Build launch arguments from DB config
-    args = args_template.replace('{path}', path).split()
+    args = shlex.split(args_template.replace('{path}', path))
 
     # Запуск в фоне
     try:
@@ -1428,7 +1494,7 @@ def launch_project(project_id: int, editor: str = "windsurf"):
         raise HTTPException(status_code=500, detail=f"Editor command '{editor_command}' not found on system")
     
     # Обновить статистику
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute('''
         UPDATE projects 
@@ -1443,7 +1509,7 @@ def launch_project(project_id: int, editor: str = "windsurf"):
 @app.get("/api/projects/{project_id}/docker")
 def get_project_docker(project_id: int):
     """Получить Docker контейнеры проекта"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT path, name FROM projects WHERE id = ?", (project_id,))
     row = cursor.fetchone()
@@ -1471,12 +1537,13 @@ def get_project_docker(project_id: int):
         
         return {"containers": containers}
     except Exception as e:
-        return {"containers": [], "error": str(e)}
+        logger.warning("Docker query failed for project %s: %s", project_id, e)
+        return {"containers": [], "docker_error": True}
 
 @app.get("/api/projects/{project_id}/git")
 def get_project_git(project_id: int):
     """Получить Git статус проекта"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT path FROM projects WHERE id = ?", (project_id,))
     row = cursor.fetchone()
@@ -1516,7 +1583,8 @@ def get_project_git(project_id: int):
             "is_git": branch is not None
         }
     except Exception as e:
-        return {"is_git": False, "error": str(e)}
+        logger.warning("Git query failed for project %s: %s", project_id, e)
+        return {"is_git": False}
 
 @app.get("/api/system")
 def get_system_metrics():
@@ -1577,7 +1645,7 @@ def get_system_metrics():
 @app.put("/api/projects/{project_id}")
 def update_project(project_id: int, project: Project):
     """Обновить проект (статус, теги, описание, лейбл)"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     
     cursor.execute('''
@@ -1594,7 +1662,7 @@ def update_project(project_id: int, project: Project):
 @app.post("/api/projects/{project_id}/label")
 def set_project_label(project_id: int, label: str = Query(...)):
     """Установить лейбл проекта (favorite, working, archive или пусто)"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     
     # Валидируем лейбл
@@ -1618,7 +1686,7 @@ class ReorderRequest(BaseModel):
 @app.post("/api/projects/reorder")
 def reorder_projects(request: ReorderRequest):
     """Изменить порядок проектов (custom sort)"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     
     # Обновляем sort_order для каждого проекта
@@ -1633,7 +1701,7 @@ def reorder_projects(request: ReorderRequest):
 @app.post("/api/projects/{project_id}/move")
 def move_project(project_id: int, direction: str = Query(...)):
     """Переместить проект вверх/вниз (up, down, top, bottom)"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     
     # Получаем текущий порядок
@@ -1693,7 +1761,7 @@ def move_project(project_id: int, direction: str = Query(...)):
 @app.post("/api/projects/{project_id}/commands")
 def add_command(project_id: int, cmd: Command):
     """Добавить команду запуска к проекту"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     
     cursor.execute(
@@ -1710,7 +1778,7 @@ def add_command(project_id: int, cmd: Command):
 @app.get("/api/projects/{project_id}/commands")
 def get_commands(project_id: int):
     """Получить команды проекта"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
@@ -1723,7 +1791,7 @@ def get_commands(project_id: int):
 @app.post("/api/projects/{project_id}/commands/{command_id}/run")
 def run_command(project_id: int, command_id: int):
     """Запустить команду проекта"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT command, cwd FROM commands WHERE id = ?", (command_id,))
     row = cursor.fetchone()
@@ -1747,7 +1815,7 @@ def run_command(project_id: int, command_id: int):
 @app.post("/api/projects/{project_id}/open-folder")
 def open_project_folder(project_id: int):
     """Открыть папку проекта в файловом менеджере"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     
     cursor.execute("SELECT path FROM projects WHERE id = ?", (project_id,))
@@ -1767,14 +1835,15 @@ def open_project_folder(project_id: int):
         )
         return {"status": "opened", "path": path}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        logger.error("Failed to open folder for project %s: %s", project_id, e)
+        raise HTTPException(status_code=500, detail="Failed to open folder")
 
 # ==================== SETTINGS API ====================
 
 @app.get("/api/settings")
 def get_settings():
     """Получить все настройки пользователя"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
@@ -1787,7 +1856,7 @@ def get_settings():
 @app.put("/api/settings")
 def update_settings(settings: dict[str, SettingValue]):
     """Обновить настройки пользователя"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
 
     for key, data in settings.items():
@@ -1813,7 +1882,7 @@ def update_settings(settings: dict[str, SettingValue]):
 @app.get("/api/settings/editors")
 def get_editors():
     """Получить список редакторов пользователя"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
@@ -1832,7 +1901,7 @@ def get_editors():
 @app.post("/api/settings/editors")
 def add_editor(editor: dict):
     """Добавить новый редактор"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     
     editor_id = editor.get('editor_id', editor['name'].lower().replace(' ', '_'))
@@ -1868,7 +1937,7 @@ def add_editor(editor: dict):
 @app.put("/api/settings/editors/{editor_id}")
 def update_editor(editor_id: str, editor: dict):
     """Обновить редактор"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     
     cursor.execute('''
@@ -1900,7 +1969,7 @@ def update_editor(editor_id: str, editor: dict):
 @app.delete("/api/settings/editors/{editor_id}")
 def delete_editor(editor_id: str):
     """Удалить редактор"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     
     cursor.execute("DELETE FROM editor_configs WHERE user_id = 'default' AND editor_id = ?", (editor_id,))
@@ -1913,7 +1982,7 @@ def delete_editor(editor_id: str):
 @app.post("/api/settings/editors/reorder")
 def reorder_editors(editor_ids: List[str]):
     """Изменить порядок редакторов"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     
     for idx, editor_id in enumerate(editor_ids):
@@ -1930,7 +1999,7 @@ def reorder_editors(editor_ids: List[str]):
 @app.post("/api/settings/editors/{editor_id}/set-default")
 def set_default_editor(editor_id: str):
     """Установить редактор по умолчанию"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     
     # Сбрасываем все is_default
@@ -1966,14 +2035,15 @@ def test_editor(editor: dict):
         if result.returncode != 0:
             return {"status": "error", "message": f"Command '{command}' not found in PATH"}
         
-        return {"status": "ok", "command": full_cmd, "path": result.stdout.strip()}
+        return {"status": "ok", "command": full_cmd}
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        logger.warning("Editor test failed for '%s': %s", command, e)
+        return {"status": "error", "message": f"Command '{command}' test failed"}
 
 @app.get("/api/settings/i18n/{lang}")
 def get_translations(lang: str):
     """Получить переводы для языка"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
@@ -1986,7 +2056,7 @@ def get_translations(lang: str):
 @app.get("/api/settings/export")
 def export_settings():
     """Экспорт всех настроек в JSON"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
@@ -2016,7 +2086,7 @@ def export_settings():
 @app.post("/api/settings/import")
 def import_settings(data: dict):
     """Импорт настроек из JSON"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     
     # Импорт настроек
@@ -2060,7 +2130,7 @@ def import_settings(data: dict):
 @app.post("/api/settings/reset")
 def reset_settings():
     """Сбросить настройки к дефолтным"""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     
     # Удаляем пользовательские настройки
@@ -2082,7 +2152,7 @@ def reset_settings():
 @app.get("/api/activity/heatmap")
 def activity_heatmap():
     """Return daily open counts for last 84 days (12 weeks) for heatmap."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
         SELECT DATE(last_opened) as day, COUNT(*) as count

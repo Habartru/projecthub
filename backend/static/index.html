@@ -1451,6 +1451,11 @@
             }
         }
         
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
         function getLabelBadge(label) {
             if (!label) return '';
             const icons = {
@@ -1699,20 +1704,20 @@
                 
                 const isLive = liveProjectIds.has(p.id);
                 return `
-                <div class="project-card category-${p.category}${isLive ? ' is-live' : ''}" id="project-${p.id}"
+                <div class="project-card category-${escapeHtml(p.category)}${isLive ? ' is-live' : ''}" id="project-${p.id}"
                      data-id="${p.id}"
                      onclick="openProjectDetail(${p.id})">
                     <div class="project-header">
-                        <div class="project-name">${getLabelBadge(p.label)}${p.display_name}</div>
+                        <div class="project-name">${getLabelBadge(p.label)}${escapeHtml(p.display_name)}</div>
                         ${moveButtons}
                         <div style="display:flex;gap:6px;align-items:center;flex-shrink:0">
                             ${isLive ? '<span class="live-badge">live</span>' : ''}
-                            <div class="project-category">${p.category}</div>
+                            <div class="project-category">${escapeHtml(p.category)}</div>
                         </div>
                     </div>
-                    <div class="project-path">${p.path}</div>
+                    <div class="project-path">${escapeHtml(p.path)}</div>
                     <div class="project-tags">
-                        ${(p.tags || []).map(t => `<span class="tag">${t}</span>`).join('')}
+                        ${(p.tags || []).map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}
                     </div>
                     <div class="project-meta">
                         <span>${getTypeIcon(p.project_type)}</span>
@@ -1875,9 +1880,9 @@
                 body.innerHTML = `
                     <div class="section">
                         <h4>${t('modal.info')}</h4>
-                        <p><strong>${t('modal.path')}:</strong> <span style="font-family:monospace;font-size:12px;color:var(--text-muted)">${project.path || '-'}</span></p>
+                        <p><strong>${t('modal.path')}:</strong> <span style="font-family:monospace;font-size:12px;color:var(--text-muted)">${escapeHtml(project.path) || '-'}</span></p>
                         <p><strong>${t('modal.type')}:</strong> ${getTypeIcon(project.project_type)}</p>
-                        <p><strong>${t('modal.status')}:</strong> <span class="status-badge status-${project.status}">${project.status}</span></p>
+                        <p><strong>${t('modal.status')}:</strong> <span class="status-badge status-${escapeHtml(project.status)}">${escapeHtml(project.status)}</span></p>
                     </div>
 
                     <div class="section">
@@ -1893,25 +1898,28 @@
                     ${git.is_git ? `
                     <div class="section">
                         <h4>${t('modal.git')}</h4>
-                        <p><strong>${t('modal.git_branch')}:</strong> <code style="background:var(--bg-hover);padding:1px 6px;border-radius:4px;font-size:12px">${git.branch || '-'}</code></p>
+                        <p><strong>${t('modal.git_branch')}:</strong> <code style="background:var(--bg-hover);padding:1px 6px;border-radius:4px;font-size:12px">${escapeHtml(git.branch) || '-'}</code></p>
                         <p><strong>${t('modal.git_changes')}:</strong> ${git.changes || 0}</p>
-                        <p><strong>${t('modal.git_last_commit')}:</strong> <span style="font-size:12px;color:var(--text-secondary)">${git.last_commit || '-'}</span></p>
+                        <p><strong>${t('modal.git_last_commit')}:</strong> <span style="font-size:12px;color:var(--text-secondary)">${escapeHtml(git.last_commit) || '-'}</span></p>
                     </div>` : ''}
 
                     ${docker.containers && docker.containers.length > 0 ? `
                     <div class="section">
                         <h4>${t('modal.docker')}</h4>
                         ${docker.containers.map(c => `
-                            <p><span style="font-family:monospace;font-size:12px">${c.name}</span> <span class="status-badge status-${c.status === 'running' ? 'active' : 'inactive'}">${c.status}</span></p>
+                            <p><span style="font-family:monospace;font-size:12px">${escapeHtml(c.name)}</span> <span class="status-badge status-${c.status === 'running' ? 'active' : 'inactive'}">${escapeHtml(c.status)}</span></p>
                         `).join('')}
                     </div>` : ''}
 
                     <div class="section">
                         <h4>${t('modal.notes')}</h4>
                         <div class="notes-list" id="notes-list">
-                            ${(project.notes || []).map(n => `
-                                <div class="note-item">${n.content}<div class="note-date">${new Date(n.created_at).toLocaleString()}</div></div>
-                            `).join('') || `<p style="color:var(--text-muted);font-size:13px">${t('modal.notes_empty')}</p>`}
+                            ${(project.notes || []).map(n => {
+                                const div = document.createElement('div');
+                                div.textContent = n.content;
+                                const escaped = div.innerHTML;
+                                return `<div class="note-item">${escaped}<div class="note-date">${new Date(n.created_at).toLocaleString()}</div></div>`;
+                            }).join('') || `<p style="color:var(--text-muted);font-size:13px">${t('modal.notes_empty')}</p>`}
                         </div>
                         <div class="add-note">
                             <input type="text" class="note-input" id="note-input" placeholder="${t('modal.notes_placeholder')}">
@@ -1931,7 +1939,7 @@
                 lucide.createIcons();
             } catch (e) {
                 console.error('Modal load error:', e);
-                body.innerHTML = `<div class="empty">${t('projects.loading_error') || 'Ошибка загрузки'}: ${e.message}</div>`;
+                body.innerHTML = `<div class="empty">${t('projects.loading_error') || 'Ошибка загрузки'}: ${escapeHtml(e.message)}</div>`;
             }
         }
         
@@ -2054,10 +2062,10 @@
                 return;
             }
             el.innerHTML = items.map(p => `
-                <div class="brain-project-item" onclick="loadBrainArticle('${p.slug}', this)" data-slug="${p.slug}">
+                <div class="brain-project-item" onclick="loadBrainArticle('${escapeHtml(p.slug)}', this)" data-slug="${escapeHtml(p.slug)}">
                     <div>
-                        <div class="brain-project-name">${p.display_name}</div>
-                        <div class="brain-project-meta">${p.last_updated}</div>
+                        <div class="brain-project-name">${escapeHtml(p.display_name)}</div>
+                        <div class="brain-project-meta">${escapeHtml(p.last_updated)}</div>
                     </div>
                     <span class="brain-insight-badge">${p.insight_count}</span>
                 </div>`).join('');
@@ -2078,16 +2086,16 @@
                 const text = s.content.join('\n').trim();
                 return `<div class="brain-section ${tc}">
                     <div class="brain-section-header">
-                        <span class="brain-type-badge ${tc}">${s.title || type}</span>
-                        ${s.date ? `<span class="brain-date">${s.date}</span>` : ''}
+                        <span class="brain-type-badge ${tc}">${escapeHtml(s.title || type)}</span>
+                        ${s.date ? `<span class="brain-date">${escapeHtml(s.date)}</span>` : ''}
                     </div>
-                    <div class="brain-section-content">${text.replace(/</g,'&lt;')}</div>
+                    <div class="brain-section-content">${escapeHtml(text)}</div>
                 </div>`;
             }).join('');
             art.innerHTML = `
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-                    <h2 style="margin:0">${displayName}</h2>
-                    <button class="btn" onclick="openLogInsight('${displayName}')">
+                    <h2 style="margin:0">${escapeHtml(displayName)}</h2>
+                    <button class="btn" onclick="openLogInsight('${escapeHtml(displayName)}')">
                         <i data-lucide="plus" style="width:14px;height:14px;"></i> Добавить инсайт
                     </button>
                 </div>
@@ -2105,10 +2113,10 @@
                 const el = document.getElementById('brain-projects-list');
                 if (!results.length) { el.innerHTML = '<div style="color:var(--text-secondary);font-size:13px;padding:8px">Ничего не найдено</div>'; return; }
                 el.innerHTML = results.map(p => `
-                    <div class="brain-project-item" onclick="loadBrainArticle('${p.slug}', this)">
+                    <div class="brain-project-item" onclick="loadBrainArticle('${escapeHtml(p.slug)}', this)">
                         <div>
-                            <div class="brain-project-name">${p.display_name}</div>
-                            <div class="brain-project-meta" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.matches[0] || ''}</div>
+                            <div class="brain-project-name">${escapeHtml(p.display_name)}</div>
+                            <div class="brain-project-meta" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.matches[0] || '')}</div>
                         </div>
                     </div>`).join('');
             }, 300);
