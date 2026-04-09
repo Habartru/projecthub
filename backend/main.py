@@ -2207,6 +2207,162 @@ def project_insight_count(project_name: str):
     return {"count": count, "last_updated": mod_time}
 
 
+# ── MCP Connect API ──────────────────────────────────────────────────────────
+
+MCP_SERVER_PATH = Path(__file__).parent.parent / "mcp-server" / "server.py"
+MCP_VENV_PYTHON = Path(__file__).parent.parent / "mcp-server" / ".venv" / "bin" / "python"
+
+IDE_DEFINITIONS = [
+    {
+        "id": "windsurf",
+        "name": "Windsurf",
+        "description": "Codeium Windsurf / Cascade",
+        "icon": "wind",
+        "color": "#1DB9C3",
+        "config_paths": [
+            Path.home() / ".config" / "Qoder" / "User" / "mcp.json",
+            Path.home() / ".codeium" / "windsurf" / "mcp_config.json",
+        ],
+        "config_key": "mcpServers",
+        "server_name": "project-context",
+    },
+    {
+        "id": "cursor",
+        "name": "Cursor",
+        "description": "Cursor AI Editor",
+        "icon": "mouse-pointer-2",
+        "color": "#146EF5",
+        "config_paths": [
+            Path.home() / ".cursor" / "mcp.json",
+            Path.home() / ".config" / "Cursor" / "User" / "mcp.json",
+        ],
+        "config_key": "mcpServers",
+        "server_name": "project-context",
+    },
+    {
+        "id": "claude",
+        "name": "Claude Code",
+        "description": "Anthropic Claude Code CLI",
+        "icon": "terminal",
+        "color": "#D97757",
+        "config_paths": [
+            Path.home() / ".claude" / "mcp_servers.json",
+            Path.home() / "Library" / "Application Support" / "Claude" / "mcp_servers.json",
+        ],
+        "config_key": "mcpServers",
+        "server_name": "project-context",
+    },
+    {
+        "id": "vscode",
+        "name": "VS Code",
+        "description": "Visual Studio Code (via .vscode/mcp.json)",
+        "icon": "code-2",
+        "color": "#007ACC",
+        "config_paths": [
+            Path.home() / ".vscode" / "mcp.json",
+        ],
+        "config_key": "servers",
+        "server_name": "project-context",
+    },
+]
+
+def _get_mcp_entry() -> dict:
+    python_bin = str(MCP_VENV_PYTHON) if MCP_VENV_PYTHON.exists() else "python3"
+    return {
+        "command": python_bin,
+        "args": [str(MCP_SERVER_PATH)]
+    }
+
+@app.get("/api/mcp/detect")
+def detect_ides():
+    """Detect installed IDEs and MCP connection status"""
+    results = []
+    for ide in IDE_DEFINITIONS:
+        found_path = None
+        connected = False
+        for p in ide["config_paths"]:
+            if p.exists():
+                found_path = str(p)
+                try:
+                    cfg = json.loads(p.read_text())
+                    servers = cfg.get(ide["config_key"], {})
+                    connected = ide["server_name"] in servers
+                except Exception:
+                    pass
+                break
+
+        results.append({
+            "id": ide["id"],
+            "name": ide["name"],
+            "description": ide["description"],
+            "icon": ide["icon"],
+            "color": ide["color"],
+            "installed": found_path is not None,
+            "connected": connected,
+            "config_path": found_path,
+        })
+    return {"ides": results, "mcp_server_exists": MCP_SERVER_PATH.exists()}
+
+@app.post("/api/mcp/connect/{ide_id}")
+def connect_ide(ide_id: str):
+    """Inject MCP config into IDE config file"""
+    ide = next((i for i in IDE_DEFINITIONS if i["id"] == ide_id), None)
+    if not ide:
+        raise HTTPException(status_code=404, detail="Unknown IDE")
+
+    if not MCP_SERVER_PATH.exists():
+        raise HTTPException(status_code=400, detail=f"MCP server not found at {MCP_SERVER_PATH}")
+
+    # Find existing config or use first path
+    config_path = None
+    for p in ide["config_paths"]:
+        if p.exists():
+            config_path = p
+            break
+    if not config_path:
+        config_path = ide["config_paths"][0]
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Load or create config
+    try:
+        cfg = json.loads(config_path.read_text()) if config_path.exists() else {}
+    except Exception:
+        cfg = {}
+
+    if ide["config_key"] not in cfg:
+        cfg[ide["config_key"]] = {}
+
+    cfg[ide["config_key"]][ide["server_name"]] = _get_mcp_entry()
+
+    config_path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
+    return {
+        "success": True,
+        "ide": ide["name"],
+        "config_path": str(config_path),
+        "message": f"Restart {ide['name']} to activate MCP tools"
+    }
+
+@app.delete("/api/mcp/connect/{ide_id}")
+def disconnect_ide(ide_id: str):
+    """Remove MCP config from IDE config file"""
+    ide = next((i for i in IDE_DEFINITIONS if i["id"] == ide_id), None)
+    if not ide:
+        raise HTTPException(status_code=404, detail="Unknown IDE")
+
+    for p in ide["config_paths"]:
+        if p.exists():
+            try:
+                cfg = json.loads(p.read_text())
+                if ide["config_key"] in cfg and ide["server_name"] in cfg[ide["config_key"]]:
+                    del cfg[ide["config_key"]][ide["server_name"]]
+                    p.write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
+                    return {"success": True, "ide": ide["name"], "config_path": str(p)}
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=str(e))
+
+    return {"success": False, "message": "Config not found"}
+
+
 @app.get("/", response_class=HTMLResponse)
 def index():
     return FileResponse(Path(__file__).parent / "static" / "index.html")

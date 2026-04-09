@@ -552,6 +552,10 @@
                 <i data-lucide="code"></i>
                 <span data-i18n="settings.sections.editors">Редакторы</span>
             </button>
+            <button class="nav-item" data-section="connect" onclick="showSection('connect')">
+                <i data-lucide="plug"></i>
+                <span>Connect IDE</span>
+            </button>
         </div>
         
         <div class="main-content">
@@ -588,6 +592,29 @@
             </div>
             
             <!-- Editors Section -->
+            <!-- Connect to IDE Section -->
+            <div id="section-connect" class="settings-section hidden">
+                <h2 class="section-title">Connect to IDE</h2>
+                <p class="section-description">Подключи MCP сервер к своему редактору одной кнопкой. После подключения перезапусти IDE.</p>
+
+                <div id="mcp-status-banner" class="mcp-banner hidden"></div>
+
+                <div class="ide-grid" id="ide-grid">
+                    <div class="ide-loading"><i data-lucide="loader" style="animation:spin 1s linear infinite"></i> Сканирование...</div>
+                </div>
+
+                <div class="settings-group" style="margin-top:24px">
+                    <label class="setting-label">Ручная настройка</label>
+                    <p class="setting-description">Если твоего IDE нет в списке — скопируй конфиг и добавь вручную в секцию <code>mcpServers</code></p>
+                    <div class="manual-config">
+                        <pre id="manual-config-json" style="margin:0;font-size:12px;overflow-x:auto"></pre>
+                        <button class="btn" onclick="copyManualConfig()" style="margin-top:8px">
+                            <i data-lucide="copy" style="width:14px;height:14px"></i> Копировать
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <div id="section-editors" class="settings-section hidden">
                 <h2 class="section-title" data-i18n="settings.editors.title">Редакторы кода</h2>
                 <p class="section-description" data-i18n="settings.editors.description">Настройте IDE и редакторы для открытия проектов</p>
@@ -657,6 +684,33 @@
         </div>
     </div>
     
+    <style>
+        .ide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-top: 16px; }
+        .ide-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 12px; transition: border-color .2s; }
+        .ide-card:hover { border-color: var(--accent); }
+        .ide-card.not-installed { opacity: 0.45; }
+        .ide-card-header { display: flex; align-items: center; gap: 12px; }
+        .ide-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .ide-icon i { width: 22px; height: 22px; color: #fff; }
+        .ide-name { font-weight: 600; font-size: 15px; }
+        .ide-desc { font-size: 12px; color: var(--text-muted); }
+        .ide-status { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+        .ide-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .ide-status-dot.connected { background: #10b981; box-shadow: 0 0 6px #10b981; }
+        .ide-status-dot.disconnected { background: var(--text-muted); }
+        .ide-status-dot.not-installed { background: var(--border); }
+        .ide-actions { display: flex; gap: 8px; margin-top: auto; }
+        .btn-connect { flex: 1; padding: 8px; border-radius: 8px; font-size: 13px; font-weight: 500; border: none; cursor: pointer; transition: opacity .15s; }
+        .btn-connect:hover { opacity: 0.85; }
+        .mcp-banner { padding: 12px 16px; border-radius: 8px; margin-bottom: 8px; font-size: 13px; }
+        .mcp-banner.error { background: rgba(248,81,73,.15); border: 1px solid rgba(248,81,73,.3); color: #f85149; }
+        .mcp-banner.ok { background: rgba(16,185,129,.12); border: 1px solid rgba(16,185,129,.3); color: #10b981; }
+        .manual-config { background: var(--bg-hover); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+        .ide-loading { color: var(--text-muted); display: flex; align-items: center; gap: 8px; padding: 24px 0; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .ide-config-path { font-size: 11px; color: var(--text-muted); font-family: monospace; word-break: break-all; }
+    </style>
+
     <div class="success-toast" id="toast">
         <i data-lucide="check" style="width:18px;height:18px;"></i>
         <span id="toast-message">Сохранено</span>
@@ -687,6 +741,122 @@
             document.querySelector(`.nav-item[data-section="${section}"]`).classList.add('active');
             
             currentSection = section;
+            if (section === 'connect') loadIDEConnect();
+        }
+
+        // ── Connect to IDE ────────────────────────────────────────
+        async function loadIDEConnect() {
+            const grid = document.getElementById('ide-grid');
+            const banner = document.getElementById('mcp-status-banner');
+            grid.innerHTML = '<div class="ide-loading"><i data-lucide="loader" style="animation:spin 1s linear infinite;width:16px;height:16px"></i> Сканирование...</div>';
+            lucide.createIcons();
+
+            try {
+                const res = await fetch('/api/mcp/detect');
+                const data = await res.json();
+
+                if (!data.mcp_server_exists) {
+                    banner.className = 'mcp-banner error';
+                    banner.textContent = '⚠ MCP сервер не найден. Убедись что установка прошла корректно.';
+                    banner.classList.remove('hidden');
+                } else {
+                    banner.classList.add('hidden');
+                }
+
+                // Manual config JSON
+                document.getElementById('manual-config-json').textContent = JSON.stringify({
+                    "mcpServers": {
+                        "project-context": {
+                            "command": "<path-to-mcp-venv>/bin/python",
+                            "args": ["<install-dir>/mcp-server/server.py"]
+                        }
+                    }
+                }, null, 2);
+
+                grid.innerHTML = '';
+                for (const ide of data.ides) {
+                    grid.insertAdjacentHTML('beforeend', renderIDECard(ide));
+                }
+                lucide.createIcons();
+            } catch (e) {
+                grid.innerHTML = `<p style="color:var(--text-muted)">Ошибка загрузки: ${e.message}</p>`;
+            }
+        }
+
+        function renderIDECard(ide) {
+            const statusText = ide.connected
+                ? 'Подключён'
+                : ide.installed ? 'Не подключён' : 'Не установлен';
+            const dotClass = ide.connected ? 'connected' : ide.installed ? 'disconnected' : 'not-installed';
+            const cardClass = ide.installed ? '' : 'not-installed';
+
+            const btnHtml = ide.installed
+                ? ide.connected
+                    ? `<button class="btn-connect" style="background:rgba(248,81,73,.15);color:#f85149" onclick="disconnectIDE('${ide.id}')">Отключить</button>`
+                    : `<button class="btn-connect" style="background:${ide.color};color:#fff" onclick="connectIDE('${ide.id}')">Подключить</button>`
+                : `<button class="btn-connect" style="background:var(--bg-hover);color:var(--text-muted);cursor:default" disabled>Не установлен</button>`;
+
+            const pathHtml = ide.config_path
+                ? `<div class="ide-config-path">${ide.config_path}</div>`
+                : '';
+
+            return `
+            <div class="ide-card ${cardClass}" id="ide-card-${ide.id}">
+                <div class="ide-card-header">
+                    <div class="ide-icon" style="background:${ide.color}">
+                        <i data-lucide="${ide.icon}"></i>
+                    </div>
+                    <div>
+                        <div class="ide-name">${ide.name}</div>
+                        <div class="ide-desc">${ide.description}</div>
+                    </div>
+                </div>
+                <div class="ide-status">
+                    <div class="ide-status-dot ${dotClass}"></div>
+                    <span>${statusText}</span>
+                </div>
+                ${pathHtml}
+                <div class="ide-actions">${btnHtml}</div>
+            </div>`;
+        }
+
+        async function connectIDE(ideId) {
+            const card = document.getElementById(`ide-card-${ideId}`);
+            const btn = card.querySelector('.btn-connect');
+            btn.textContent = 'Подключаю...';
+            btn.disabled = true;
+            try {
+                const res = await fetch(`/api/mcp/connect/${ideId}`, { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`✓ ${data.ide} подключён. Перезапусти IDE.`);
+                    await loadIDEConnect();
+                } else {
+                    showToast('Ошибка: ' + (data.detail || 'неизвестная ошибка'));
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                showToast('Ошибка: ' + e.message);
+                btn.disabled = false;
+            }
+        }
+
+        async function disconnectIDE(ideId) {
+            try {
+                const res = await fetch(`/api/mcp/connect/${ideId}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`Отключено от ${ideId}`);
+                    await loadIDEConnect();
+                }
+            } catch (e) {
+                showToast('Ошибка: ' + e.message);
+            }
+        }
+
+        function copyManualConfig() {
+            const text = document.getElementById('manual-config-json').textContent;
+            navigator.clipboard.writeText(text).then(() => showToast('Скопировано в буфер обмена'));
         }
         
         // Translations
