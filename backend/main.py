@@ -2219,9 +2219,13 @@ IDE_DEFINITIONS = [
         "description": "Codeium Windsurf / Cascade",
         "icon": "wind",
         "color": "#1DB9C3",
+        "install_dirs": [
+            Path.home() / ".config" / "Windsurf",
+            Path.home() / ".config" / "Qoder",
+        ],
         "config_paths": [
+            Path.home() / ".config" / "Windsurf" / "User" / "mcp.json",
             Path.home() / ".config" / "Qoder" / "User" / "mcp.json",
-            Path.home() / ".codeium" / "windsurf" / "mcp_config.json",
         ],
         "config_key": "mcpServers",
         "server_name": "project-context",
@@ -2232,6 +2236,10 @@ IDE_DEFINITIONS = [
         "description": "Cursor AI Editor",
         "icon": "mouse-pointer-2",
         "color": "#146EF5",
+        "install_dirs": [
+            Path.home() / ".cursor",
+            Path.home() / ".config" / "Cursor",
+        ],
         "config_paths": [
             Path.home() / ".cursor" / "mcp.json",
             Path.home() / ".config" / "Cursor" / "User" / "mcp.json",
@@ -2245,6 +2253,9 @@ IDE_DEFINITIONS = [
         "description": "Anthropic Claude Code CLI",
         "icon": "terminal",
         "color": "#D97757",
+        "install_dirs": [
+            Path.home() / ".claude",
+        ],
         "config_paths": [
             Path.home() / ".claude" / "mcp_servers.json",
             Path.home() / "Library" / "Application Support" / "Claude" / "mcp_servers.json",
@@ -2258,11 +2269,32 @@ IDE_DEFINITIONS = [
         "description": "Visual Studio Code + Copilot",
         "icon": "code-2",
         "color": "#007ACC",
+        "install_dirs": [
+            Path.home() / ".config" / "Code",
+            Path.home() / ".vscode",
+        ],
         "config_paths": [
-            Path.home() / ".vscode" / "mcp.json",
             Path.home() / ".config" / "Code" / "User" / "mcp.json",
+            Path.home() / ".vscode" / "mcp.json",
         ],
         "config_key": "servers",
+        "server_name": "project-context",
+    },
+    {
+        "id": "antigravity",
+        "name": "AntiGravity",
+        "description": "AntiGravity AI Code Editor",
+        "icon": "rocket",
+        "color": "#8B5CF6",
+        "install_dirs": [
+            Path.home() / ".config" / "Antigravity",
+            Path.home() / ".config" / "AntiGravity",
+        ],
+        "config_paths": [
+            Path.home() / ".config" / "Antigravity" / "User" / "mcp.json",
+            Path.home() / ".config" / "AntiGravity" / "User" / "mcp.json",
+        ],
+        "config_key": "mcpServers",
         "server_name": "project-context",
     },
     {
@@ -2327,19 +2359,6 @@ IDE_DEFINITIONS = [
         "server_name": "project-context",
     },
     {
-        "id": "antigravity",
-        "name": "AntiGravity",
-        "description": "AntiGravity AI Code Editor",
-        "icon": "rocket",
-        "color": "#8B5CF6",
-        "config_paths": [
-            Path.home() / ".config" / "AntiGravity" / "User" / "mcp.json",
-            Path.home() / ".antigravity" / "mcp.json",
-        ],
-        "config_key": "mcpServers",
-        "server_name": "project-context",
-    },
-    {
         "id": "void",
         "name": "Void",
         "description": "Void — open-source Cursor alternative",
@@ -2378,6 +2397,18 @@ IDE_DEFINITIONS = [
         "config_key": "mcpServers",
         "server_name": "project-context",
     },
+    {
+        "id": "opencode",
+        "name": "OpenCode",
+        "description": "OpenCode — terminal AI coding agent",
+        "icon": "square-terminal",
+        "color": "#10b981",
+        "config_paths": [
+            Path.home() / ".config" / "opencode" / "mcp.json",
+        ],
+        "config_key": "mcpServers",
+        "server_name": "project-context",
+    },
 ]
 
 def _get_mcp_entry() -> dict:
@@ -2392,6 +2423,10 @@ def detect_ides():
     """Detect installed IDEs and MCP connection status"""
     results = []
     for ide in IDE_DEFINITIONS:
+        # Check if IDE is installed via its config dir
+        installed = any(d.exists() for d in ide.get("install_dirs", []))
+
+        # Find existing mcp.json
         found_path = None
         connected = False
         for p in ide["config_paths"]:
@@ -2405,13 +2440,17 @@ def detect_ides():
                     pass
                 break
 
+        # Also mark as installed if mcp.json found
+        if found_path:
+            installed = True
+
         results.append({
             "id": ide["id"],
             "name": ide["name"],
             "description": ide["description"],
             "icon": ide["icon"],
             "color": ide["color"],
-            "installed": found_path is not None,
+            "installed": installed,
             "connected": connected,
             "config_path": found_path,
         })
