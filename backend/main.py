@@ -2221,10 +2221,23 @@ IDE_DEFINITIONS = [
         "color": "#1DB9C3",
         "install_dirs": [
             Path.home() / ".config" / "Windsurf",
-            Path.home() / ".config" / "Qoder",
         ],
         "config_paths": [
             Path.home() / ".config" / "Windsurf" / "User" / "mcp.json",
+        ],
+        "config_key": "mcpServers",
+        "server_name": "project-context",
+    },
+    {
+        "id": "qoder",
+        "name": "Qoder",
+        "description": "Qoder AI IDE (qoder.com)",
+        "icon": "layout-dashboard",
+        "color": "#6366F1",
+        "install_dirs": [
+            Path.home() / ".config" / "Qoder",
+        ],
+        "config_paths": [
             Path.home() / ".config" / "Qoder" / "User" / "mcp.json",
         ],
         "config_key": "mcpServers",
