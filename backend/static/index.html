@@ -2058,7 +2058,7 @@
         function renderBrainProjectsList(items) {
             const el = document.getElementById('brain-projects-list');
             if (!items.length) {
-                el.innerHTML = '<div style="color:var(--text-secondary);font-size:13px;padding:8px">Нет знаний. Используй log_session_insight в Windsurf или кнопку 💡 на карточке проекта.</div>';
+                el.innerHTML = '<div style="color:var(--text-secondary);font-size:13px;padding:8px">' + t('brain.no_knowledge') + '</div>';
                 return;
             }
             el.innerHTML = items.map(p => `
@@ -2096,10 +2096,10 @@
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
                     <h2 style="margin:0">${escapeHtml(displayName)}</h2>
                     <button class="btn" onclick="openLogInsight('${escapeHtml(displayName)}')">
-                        <i data-lucide="plus" style="width:14px;height:14px;"></i> Добавить инсайт
+                        <i data-lucide="plus" style="width:14px;height:14px;"></i> ${t('brain.add_insight')}
                     </button>
                 </div>
-                ${sectionsHtml || '<div class="brain-empty" style="padding:30px 0"><div style="color:var(--text-secondary)">Нет записей</div></div>'}`;
+                ${sectionsHtml || '<div class="brain-empty" style="padding:30px 0"><div style="color:var(--text-secondary)">' + t('brain.no_entries') + '</div></div>'}`;
             lucide.createIcons();
         }
 
@@ -2111,7 +2111,7 @@
                 const r = await fetch(`/api/brain/search?q=${encodeURIComponent(query)}`);
                 const results = await r.json();
                 const el = document.getElementById('brain-projects-list');
-                if (!results.length) { el.innerHTML = '<div style="color:var(--text-secondary);font-size:13px;padding:8px">Ничего не найдено</div>'; return; }
+                if (!results.length) { el.innerHTML = '<div style="color:var(--text-secondary);font-size:13px;padding:8px">' + t('brain.not_found') + '</div>'; return; }
                 el.innerHTML = results.map(p => `
                     <div class="brain-project-item" onclick="loadBrainArticle('${escapeHtml(p.slug)}', this)">
                         <div>
@@ -2198,7 +2198,7 @@
                         : d.count <= max * 0.25 ? 1
                         : d.count <= max * 0.5 ? 2
                         : d.count <= max * 0.75 ? 3 : 4;
-                    const tip = d.date + (d.count ? ': ' + d.count + ' откр.' : '');
+                    const tip = d.date + (d.count ? ': ' + d.count + ' ' + t('brain.heatmap_opens') : '');
                     return '<div class="heatmap-col"><div class="heatmap-cell" data-level="' + level + '" title="' + tip + '"></div></div>';
                 }).join('');
 
@@ -2211,7 +2211,7 @@
                 const total = days.reduce((s, d) => s + d.count, 0);
                 const streakEl = document.getElementById('heatmap-streak');
                 if (streakEl) streakEl.innerHTML =
-                    (streak > 0 ? '<span>' + streak + '</span> дн. подряд &nbsp;·&nbsp; ' : '') + '<span>' + total + '</span> открытий за 12 нед.';
+                    (streak > 0 ? '<span>' + streak + '</span> ' + t('brain.streak_days') + ' &nbsp;·&nbsp; ' : '') + '<span>' + total + '</span> ' + t('brain.opens_12w');
             } catch(e) {
                 console.warn('Heatmap load failed:', e);
             }

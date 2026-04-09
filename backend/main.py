@@ -35,6 +35,14 @@ BRAIN_DAILY = BRAIN_DIR / "daily"
 BRAIN_PROJECTS = BRAIN_DIR / "knowledge" / "projects"
 BRAIN_INDEX = BRAIN_DIR / "knowledge" / "index.md"
 
+def brain_project_slug(project_name: str) -> str:
+    """Convert project name to filesystem-safe slug. E.g. 'infra/@hub' -> 'infra--@hub'."""
+    return project_name.replace("/", "--").replace(" ", "_")
+
+def brain_slug_to_display(slug: str) -> str:
+    """Convert slug back to display name. E.g. 'infra--@hub' -> 'infra/@hub'."""
+    return slug.replace("--", "/").replace("_", " ")
+
 # Модели данных
 class Project(BaseModel):
     id: Optional[int] = None
@@ -616,6 +624,33 @@ def init_translations(cursor):
         ('zh', 'connect.error', '错误', None),
         ('zh', 'connect.restart_ide', '已连接。请重启 IDE。', None),
         ('zh', 'connect.disconnected_from', '已断开', None),
+
+        # Brain i18n — Russian
+        ('ru', 'brain.no_knowledge', 'Нет знаний. Используй log_session_insight или кнопку на карточке проекта.', None),
+        ('ru', 'brain.no_entries', 'Нет записей', None),
+        ('ru', 'brain.add_insight', 'Добавить инсайт', None),
+        ('ru', 'brain.not_found', 'Ничего не найдено', None),
+        ('ru', 'brain.heatmap_opens', 'откр.', None),
+        ('ru', 'brain.streak_days', 'дн. подряд', None),
+        ('ru', 'brain.opens_12w', 'открытий за 12 нед.', None),
+
+        # Brain i18n — English
+        ('en', 'brain.no_knowledge', 'No knowledge yet. Use log_session_insight or the button on a project card.', None),
+        ('en', 'brain.no_entries', 'No entries', None),
+        ('en', 'brain.add_insight', 'Add insight', None),
+        ('en', 'brain.not_found', 'Nothing found', None),
+        ('en', 'brain.heatmap_opens', 'opens', None),
+        ('en', 'brain.streak_days', 'days streak', None),
+        ('en', 'brain.opens_12w', 'opens in 12 weeks', None),
+
+        # Brain i18n — Chinese
+        ('zh', 'brain.no_knowledge', '暂无知识。请使用 log_session_insight 或项目卡片上的按钮。', None),
+        ('zh', 'brain.no_entries', '暂无记录', None),
+        ('zh', 'brain.add_insight', '添加洞察', None),
+        ('zh', 'brain.not_found', '未找到', None),
+        ('zh', 'brain.heatmap_opens', '次打开', None),
+        ('zh', 'brain.streak_days', '天连续', None),
+        ('zh', 'brain.opens_12w', '次打开（12周）', None),
     ]
     
     for trans in translations:
@@ -2236,7 +2271,7 @@ def brain_projects():
     for f in sorted(BRAIN_PROJECTS.glob("*.md"), key=lambda x: x.stat().st_mtime, reverse=True):
         content = f.read_text(errors="replace")
         insight_count = len(re.findall(r"^### ", content, re.MULTILINE))
-        display = f.stem.replace("--", "/").replace("_", " ")
+        display = brain_slug_to_display(f.stem)
         mod_time = datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
         result.append({
             "slug": f.stem,
@@ -2256,7 +2291,7 @@ def brain_project_detail(slug: str):
         raise HTTPException(status_code=404, detail="Knowledge article not found")
     content = path.read_text(errors="replace")
     sections = []
-    current = {"title": "Общее", "type": "other", "content": [], "tags": []}
+    current = {"title": "General", "type": "other", "content": [], "tags": []}
     for line in content.splitlines():
         m = re.match(r"^### (.+?) — (.+)$", line)
         if m:
@@ -2305,16 +2340,15 @@ def brain_log(payload: dict):
     )
 
     if not daily_path.exists():
-        daily_path.write_text(f"# Daily Log — {today}\n\n*Записано через ProjectHub Brain*\n" + entry)
+        daily_path.write_text(f"# Daily Log — {today}\n\n*Logged via ProjectHub Brain*\n" + entry)
     else:
         with daily_path.open("a") as f:
             f.write(entry)
 
-    safe_name = project_name.replace("/", "--").replace(" ", "_")
-    proj_file = BRAIN_PROJECTS / f"{safe_name}.md"
+    proj_file = BRAIN_PROJECTS / f"{brain_project_slug(project_name)}.md"
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
     new_section = (
-        f"\n## Обновление {now_str}\n\n"
+        f"\n## Update {now_str}\n\n"
         f"### {insight_type} — {now_str}\n"
         f"{tags_str}  \n\n{content}\n\n"
     )
@@ -2324,8 +2358,8 @@ def brain_log(payload: dict):
     else:
         proj_file.write_text(
             f"# {project_name}\n\n"
-            f"*Knowledge article. Создано: {now_str}*\n\n"
-            f"## История решений\n"
+            f"*Knowledge article. Created: {now_str}*\n\n"
+            f"## Decisions\n"
             + new_section
         )
 
@@ -2343,7 +2377,7 @@ def brain_search(q: str = Query(..., min_length=2)):
         content = f.read_text(errors="replace")
         if q_lower in content.lower():
             lines = [l for l in content.splitlines() if q_lower in l.lower()]
-            display = f.stem.replace("--", "/").replace("_", " ")
+            display = brain_slug_to_display(f.stem)
             results.append({
                 "slug": f.stem,
                 "display_name": display,
@@ -2355,8 +2389,7 @@ def brain_search(q: str = Query(..., min_length=2)):
 @app.get("/api/brain/project-insights/{project_name:path}")
 def project_insight_count(project_name: str):
     """Get insight count for a specific project (for dashboard cards)."""
-    safe_name = project_name.replace("/", "--").replace(" ", "_")
-    path = BRAIN_PROJECTS / f"{safe_name}.md"
+    path = BRAIN_PROJECTS / f"{brain_project_slug(project_name)}.md"
     if not path.exists():
         return {"count": 0, "last_updated": None}
     content = path.read_text(errors="replace")
