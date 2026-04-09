@@ -1,0 +1,183 @@
+name: Install & API Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-install:
+    name: Fresh install on Ubuntu
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Create test projects structure
+        run: |
+          mkdir -p ~/Projects/@web/mysite
+          mkdir -p ~/Projects/@infra/backend
+          git init ~/Projects/@web/mysite
+          git init ~/Projects/@infra/backend
+
+      - name: Run install script (non-interactive)
+        env:
+          PROJECTHUB_DIR: ${{ github.workspace }}/.test-install
+        run: |
+          bash install.sh
+        # IS_INTERACTIVE=false is auto-detected (no tty in CI)
+
+      - name: Wait for server to start
+        run: sleep 3
+
+      - name: Start server for API tests
+        env:
+          PROJECTHUB_DIR: ${{ github.workspace }}/.test-install
+        run: |
+          VENV="${PROJECTHUB_DIR}/venv"
+          nohup "$VENV/bin/python" backend/main.py > /tmp/projecthub.log 2>&1 &
+          echo "PID=$!" >> $GITHUB_ENV
+          sleep 4
+
+      - name: Check server is responding
+        run: |
+          curl -sf http://localhost:8472/ | grep -q "ProjectHub" || \
+          curl -sf http://localhost:8472/api/projects > /dev/null
+          echo "✓ Server is up"
+
+      - name: Test /api/projects
+        run: |
+          RESP=$(curl -sf http://localhost:8472/api/projects)
+          echo "$RESP" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          assert 'projects' in d, 'Missing projects key'
+          print(f'✓ /api/projects — {len(d[\"projects\"])} projects found')
+          "
+
+      - name: Test /api/categories
+        run: |
+          RESP=$(curl -sf http://localhost:8472/api/categories)
+          echo "$RESP" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          assert 'categories' in d, 'Missing categories key'
+          print(f'✓ /api/categories — {len(d[\"categories\"])} categories')
+          "
+
+      - name: Test /api/system
+        run: |
+          RESP=$(curl -sf http://localhost:8472/api/system)
+          echo "$RESP" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          assert 'cpu' in d, 'Missing cpu key'
+          assert 'ram' in d, 'Missing ram key'
+          assert 'disk' in d, 'Missing disk key'
+          print(f'✓ /api/system — cpu={d[\"cpu\"][\"percent\"]}% ram={d[\"ram\"][\"percent\"]}%')
+          "
+
+      - name: Test /api/activity/heatmap
+        run: |
+          RESP=$(curl -sf http://localhost:8472/api/activity/heatmap)
+          echo "$RESP" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          assert isinstance(d, list), 'Expected list'
+          assert len(d) > 0, 'Empty heatmap'
+          assert 'date' in d[0] and 'count' in d[0], 'Wrong heatmap format'
+          print(f'✓ /api/activity/heatmap — {len(d)} days')
+          "
+
+      - name: Test /api/brain/stats
+        run: |
+          RESP=$(curl -sf http://localhost:8472/api/brain/stats)
+          echo "$RESP" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          assert 'total_projects' in d, 'Missing total_projects'
+          assert 'total_insights' in d, 'Missing total_insights'
+          print(f'✓ /api/brain/stats — projects={d[\"total_projects\"]} insights={d[\"total_insights\"]}')
+          "
+
+      - name: Test /api/mcp/detect
+        run: |
+          RESP=$(curl -sf http://localhost:8472/api/mcp/detect)
+          echo "$RESP" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          assert 'ides' in d, 'Missing ides key'
+          assert 'mcp_server_exists' in d, 'Missing mcp_server_exists'
+          assert len(d['ides']) >= 10, f'Expected 10+ IDEs, got {len(d[\"ides\"])}'
+          print(f'✓ /api/mcp/detect — {len(d[\"ides\"])} IDEs, mcp_server={d[\"mcp_server_exists\"]}')
+          "
+
+      - name: Test /api/settings/i18n (ru/en/zh)
+        run: |
+          for lang in ru en zh; do
+            RESP=$(curl -sf "http://localhost:8472/api/settings/i18n/$lang")
+            echo "$RESP" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          t = d['translations']
+          assert len(t) > 50, f'Too few translations: {len(t)}'
+          required = ['connect.btn_connect', 'connect.status_connected', 'connect.title']
+          for k in required:
+              assert k in t, f'Missing key: {k}'
+          print(f'✓ /api/settings/i18n/$lang — {len(t)} keys, connect.* keys OK')
+          "
+          done
+
+      - name: Test /api/settings
+        run: |
+          RESP=$(curl -sf http://localhost:8472/api/settings)
+          echo "$RESP" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          assert 'settings' in d, 'Missing settings key'
+          print(f'✓ /api/settings — keys: {list(d[\"settings\"].keys())}')
+          "
+
+      - name: Test /api/settings/editors
+        run: |
+          RESP=$(curl -sf http://localhost:8472/api/settings/editors)
+          echo "$RESP" | python3 -c "
+          import json, sys
+          d = json.load(sys.stdin)
+          assert 'editors' in d, 'Missing editors key'
+          assert len(d['editors']) > 0, 'No editors configured'
+          print(f'✓ /api/settings/editors — {len(d[\"editors\"])} editors')
+          "
+
+      - name: Test MCP server Python import
+        run: |
+          cd mcp-server
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet -r requirements.txt
+          .venv/bin/python -c "
+          import server
+          print('✓ MCP server imports OK')
+          print(f'  MEMORY_DIR = {server.MEMORY_DIR}')
+          print(f'  PROJECTS_DIR = {server.PROJECTS_DIR}')
+          "
+
+      - name: Print server logs on failure
+        if: failure()
+        run: |
+          echo "=== Server log ==="
+          cat /tmp/projecthub.log || echo "(no log)"
+
+      - name: Summary
+        run: |
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  ✅  All tests passed!"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
