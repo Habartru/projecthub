@@ -594,22 +594,22 @@
             <!-- Editors Section -->
             <!-- Connect to IDE Section -->
             <div id="section-connect" class="settings-section hidden">
-                <h2 class="section-title">Connect to IDE</h2>
-                <p class="section-description">Подключи MCP сервер к своему редактору одной кнопкой. После подключения перезапусти IDE.</p>
+                <h2 class="section-title" id="connect-title">Connect to IDE</h2>
+                <p class="section-description" id="connect-desc"></p>
 
                 <div id="mcp-status-banner" class="mcp-banner hidden"></div>
 
                 <div class="ide-grid" id="ide-grid">
-                    <div class="ide-loading"><i data-lucide="loader" style="animation:spin 1s linear infinite"></i> Сканирование...</div>
+                    <div class="ide-loading"><i data-lucide="loader" style="animation:spin 1s linear infinite"></i> <span id="connect-scanning"></span></div>
                 </div>
 
                 <div class="settings-group" style="margin-top:24px">
-                    <label class="setting-label">Ручная настройка</label>
-                    <p class="setting-description">Если твоего IDE нет в списке — скопируй конфиг и добавь вручную в секцию <code>mcpServers</code></p>
+                    <label class="setting-label" id="connect-manual-title"></label>
+                    <p class="setting-description" id="connect-manual-desc"></p>
                     <div class="manual-config">
                         <pre id="manual-config-json" style="margin:0;font-size:12px;overflow-x:auto"></pre>
                         <button class="btn" onclick="copyManualConfig()" style="margin-top:8px">
-                            <i data-lucide="copy" style="width:14px;height:14px"></i> Копировать
+                            <i data-lucide="copy" style="width:14px;height:14px"></i> <span id="connect-copy-btn"></span>
                         </button>
                     </div>
                 </div>
@@ -748,8 +748,17 @@
         async function loadIDEConnect() {
             const grid = document.getElementById('ide-grid');
             const banner = document.getElementById('mcp-status-banner');
-            grid.innerHTML = '<div class="ide-loading"><i data-lucide="loader" style="animation:spin 1s linear infinite;width:16px;height:16px"></i> Сканирование...</div>';
+            grid.innerHTML = `<div class="ide-loading"><i data-lucide="loader" style="animation:spin 1s linear infinite;width:16px;height:16px"></i> ${t('connect.scanning')}</div>`;
             lucide.createIcons();
+
+            // Update static text
+            const el = (id) => document.getElementById(id);
+            if (el('connect-title')) el('connect-title').textContent = t('connect.title');
+            if (el('connect-desc')) el('connect-desc').textContent = t('connect.description');
+            if (el('connect-scanning')) el('connect-scanning').textContent = t('connect.scanning');
+            if (el('connect-manual-title')) el('connect-manual-title').textContent = t('connect.manual_title');
+            if (el('connect-manual-desc')) el('connect-manual-desc').innerHTML = t('connect.manual_description') + ' <code>mcpServers</code>';
+            if (el('connect-copy-btn')) el('connect-copy-btn').textContent = t('connect.copy');
 
             try {
                 const res = await fetch('/api/mcp/detect');
@@ -757,7 +766,7 @@
 
                 if (!data.mcp_server_exists) {
                     banner.className = 'mcp-banner error';
-                    banner.textContent = '⚠ MCP сервер не найден. Убедись что установка прошла корректно.';
+                    banner.textContent = t('connect.mcp_missing');
                     banner.classList.remove('hidden');
                 } else {
                     banner.classList.add('hidden');
@@ -779,22 +788,22 @@
                 }
                 lucide.createIcons();
             } catch (e) {
-                grid.innerHTML = `<p style="color:var(--text-muted)">Ошибка загрузки: ${e.message}</p>`;
+                grid.innerHTML = `<p style="color:var(--text-muted)">${t('connect.error_load')}: ${e.message}</p>`;
             }
         }
 
         function renderIDECard(ide) {
             const statusText = ide.connected
-                ? 'Подключён'
-                : ide.installed ? 'Не подключён' : 'Не установлен';
+                ? t('connect.status_connected')
+                : ide.installed ? t('connect.status_disconnected') : t('connect.status_not_installed');
             const dotClass = ide.connected ? 'connected' : ide.installed ? 'disconnected' : 'not-installed';
             const cardClass = ide.installed ? '' : 'not-installed';
 
             const btnHtml = ide.installed
                 ? ide.connected
-                    ? `<button class="btn-connect" style="background:rgba(248,81,73,.15);color:#f85149" onclick="disconnectIDE('${ide.id}')">Отключить</button>`
-                    : `<button class="btn-connect" style="background:${ide.color};color:#fff" onclick="connectIDE('${ide.id}')">Подключить</button>`
-                : `<button class="btn-connect" style="background:var(--bg-hover);color:var(--text-muted);cursor:default" disabled>Не установлен</button>`;
+                    ? `<button class="btn-connect" style="background:rgba(248,81,73,.15);color:#f85149" onclick="disconnectIDE('${ide.id}')">${t('connect.btn_disconnect')}</button>`
+                    : `<button class="btn-connect" style="background:${ide.color};color:#fff" onclick="connectIDE('${ide.id}')">${t('connect.btn_connect')}</button>`
+                : `<button class="btn-connect" style="background:var(--bg-hover);color:var(--text-muted);cursor:default" disabled>${t('connect.btn_not_installed')}</button>`;
 
             const pathHtml = ide.config_path
                 ? `<div class="ide-config-path">${ide.config_path}</div>`
@@ -823,20 +832,20 @@
         async function connectIDE(ideId) {
             const card = document.getElementById(`ide-card-${ideId}`);
             const btn = card.querySelector('.btn-connect');
-            btn.textContent = 'Подключаю...';
+            btn.textContent = t('connect.btn_connecting');
             btn.disabled = true;
             try {
                 const res = await fetch(`/api/mcp/connect/${ideId}`, { method: 'POST' });
                 const data = await res.json();
                 if (data.success) {
-                    showToast(`✓ ${data.ide} подключён. Перезапусти IDE.`);
+                    showToast(`✓ ${data.ide} ${t('connect.restart_ide')}`);
                     await loadIDEConnect();
                 } else {
-                    showToast('Ошибка: ' + (data.detail || 'неизвестная ошибка'));
+                    showToast(`${t('connect.error')}: ` + (data.detail || '?'));
                     btn.disabled = false;
                 }
             } catch (e) {
-                showToast('Ошибка: ' + e.message);
+                showToast(`${t('connect.error')}: ` + e.message);
                 btn.disabled = false;
             }
         }
@@ -846,17 +855,17 @@
                 const res = await fetch(`/api/mcp/connect/${ideId}`, { method: 'DELETE' });
                 const data = await res.json();
                 if (data.success) {
-                    showToast(`Отключено от ${ideId}`);
+                    showToast(`${t('connect.disconnected_from')} ${ideId}`);
                     await loadIDEConnect();
                 }
             } catch (e) {
-                showToast('Ошибка: ' + e.message);
+                showToast(`${t('connect.error')}: ` + e.message);
             }
         }
 
         function copyManualConfig() {
             const text = document.getElementById('manual-config-json').textContent;
-            navigator.clipboard.writeText(text).then(() => showToast('Скопировано в буфер обмена'));
+            navigator.clipboard.writeText(text).then(() => showToast(t('connect.copied')));
         }
         
         // Translations
@@ -931,6 +940,8 @@
                     await loadTranslations();
                     // Notify index.html tab about language change
                     localStorage.setItem('projecthub_lang_changed', value);
+                    // Re-render Connect IDE if active
+                    if (currentSection === 'connect') loadIDEConnect();
                 }
                 if (key === 'theme') {
                     applyTheme(value);
