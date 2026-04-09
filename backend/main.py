@@ -727,15 +727,17 @@ def scan_projects():
 
         fs_category = category_dir.name  # @bringo, @active, etc.
 
+        SKIP_DIRS = {'node_modules', 'venv', '.venv', '__pycache__', 'target', 'build', 'dist', '.git', '.idea', '.vscode'}
+
         for item_dir in category_dir.iterdir():
-            if not item_dir.is_dir() or item_dir.name.startswith('.'):
+            if not item_dir.is_dir() or item_dir.name.startswith('.') or item_dir.name in SKIP_DIRS:
                 continue
 
             if _is_container_dir(item_dir):
                 # Это контейнер (чат, сбор данных, etc.) — сканируем подпапки
                 subcategory = item_dir.name  # "чат", "сбор данных"
                 for sub_project_dir in item_dir.iterdir():
-                    if not sub_project_dir.is_dir() or sub_project_dir.name.startswith('.'):
+                    if not sub_project_dir.is_dir() or sub_project_dir.name.startswith('.') or sub_project_dir.name in SKIP_DIRS:
                         continue
                     # Уникальное имя: "контейнер/проект" чтобы избежать коллизий
                     unique_name = f"{subcategory}/{sub_project_dir.name}"
