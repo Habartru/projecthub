@@ -223,6 +223,48 @@ else
   ok "Brain vault already exists at $VAULT"
 fi
 
+# ── Obsidian autostart (optional) ──────────────────────────
+OBSIDIAN_BIN=""
+for candidate in \
+    "$HOME/Applications/Obsidian"*.AppImage \
+    "$HOME/.local/bin/obsidian" \
+    "/opt/Obsidian/obsidian" \
+    "/usr/bin/obsidian" \
+    "/usr/local/bin/obsidian"; do
+  # shellcheck disable=SC2086
+  for f in $candidate; do
+    [ -f "$f" ] && [ -x "$f" ] && OBSIDIAN_BIN="$f" && break 2
+  done
+done
+
+if [ -n "$OBSIDIAN_BIN" ]; then
+  info "Obsidian found: $OBSIDIAN_BIN"
+  AUTOSTART_DIR="$HOME/.config/autostart"
+  OBSIDIAN_DESKTOP="$AUTOSTART_DIR/obsidian.desktop"
+
+  OBS_AUTOSTART="n"
+  prompt "Add Obsidian to autostart (opens @memory vault on login)? [y/N] " "n" OBS_AUTOSTART
+  if [[ "$OBS_AUTOSTART" =~ ^[Yy]$ ]]; then
+    mkdir -p "$AUTOSTART_DIR"
+    cat > "$OBSIDIAN_DESKTOP" <<DESK
+[Desktop Entry]
+Name=Obsidian
+Comment=Knowledge Base (@memory vault)
+Exec=$OBSIDIAN_BIN --vault $VAULT
+Type=Application
+Terminal=false
+Icon=obsidian
+Categories=Office;
+StartupNotify=false
+X-GNOME-Autostart-Delay=3
+DESK
+    ok "Obsidian autostart added: $OBSIDIAN_DESKTOP"
+  fi
+else
+  warn "Obsidian not found — skipping autostart setup"
+  echo "  Install from https://obsidian.md and re-run installer to set up autostart"
+fi
+
 # ── Done! ──────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
