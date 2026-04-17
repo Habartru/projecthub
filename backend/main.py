@@ -801,33 +801,72 @@ def scan_projects():
 
     return projects
 
-def detect_project_type(project_dir: Path) -> str:
-    """Улучшенное определение типа проекта с глубоким анализом"""
-    
-    # Получаем все файлы (рекурсивно, но ограничиваем глубину)
-    all_files = []
-    try:
-        for item in project_dir.iterdir():
-            if item.is_file():
-                all_files.append(item.name)
-            elif item.is_dir() and not item.name.startswith('.') and item.name not in ['node_modules', 'venv', '.git', '__pycache__', 'target', 'build', 'dist']:
-                # Проверяем первый уровень подпапок
+SCAN_SKIP_DIRS = frozenset({
+    'node_modules', 'venv', '.venv', '__pycache__', 'target', 'build',
+    'dist', '.git', '.idea', '.vscode', 'out', '.next', '.nuxt',
+    'coverage', '.pytest_cache', '.mypy_cache', '.tox', '.ruff_cache',
+    '.cache',
+})
+
+DETECT_MAX_DEPTH = 3
+
+
+def _collect_project_files(project_dir: Path, max_depth: int = DETECT_MAX_DEPTH) -> tuple[set, list, dict]:
+    """BFS-collect files under project_dir, skipping junk dirs.
+
+    Returns (files_basenames, relative_paths, marker_paths) where:
+      - files_basenames: set of file basenames found anywhere
+      - relative_paths:  list of "subdir/file.ext" strings (for ext-based fallbacks)
+      - marker_paths:    dict[basename -> absolute Path] of closest-to-root match
+
+    BFS ensures shallower files win in marker_paths — so when a monorepo has
+    backend/requirements.txt and root/requirements.txt, the root one is returned.
+    """
+    files_set: set = set()
+    all_rel: list = []
+    marker_paths: dict = {}
+
+    if not project_dir.is_dir():
+        return files_set, all_rel, marker_paths
+
+    queue = [(project_dir, 0)]
+    while queue:
+        current, depth = queue.pop(0)
+        try:
+            entries = sorted(current.iterdir(), key=lambda p: p.name)
+        except (OSError, PermissionError):
+            continue
+        for entry in entries:
+            name = entry.name
+            if entry.is_file():
+                files_set.add(name)
                 try:
-                    for subitem in item.iterdir():
-                        if subitem.is_file():
-                            all_files.append(f"{item.name}/{subitem.name}")
-                except Exception:
-                    logger.debug("Failed to iterate subdirectory in %s", project_dir)
-    except Exception:
-        logger.debug("Failed to iterate project directory %s", project_dir)
-    
-    files = set(all_files)
-    
+                    rel = str(entry.relative_to(project_dir))
+                except ValueError:
+                    rel = name
+                all_rel.append(rel)
+                if name not in marker_paths:
+                    marker_paths[name] = entry
+            elif entry.is_dir():
+                if name in SCAN_SKIP_DIRS:
+                    continue
+                if name.startswith('.'):
+                    continue
+                if depth < max_depth:
+                    queue.append((entry, depth + 1))
+    return files_set, all_rel, marker_paths
+
+
+def detect_project_type(project_dir: Path) -> str:
+    """Улучшенное определение типа проекта с глубоким анализом (BFS глубиной 3)."""
+
+    files, all_files, marker_paths = _collect_project_files(project_dir)
+
     # Node.js / TypeScript ecosystem
-    if "package.json" in files or any("package.json" in f for f in files):
-        # Проверяем фреймворки
-        pkg_path = project_dir / "package.json"
-        if pkg_path.exists():
+    if "package.json" in files:
+        # Проверяем фреймворки по ближайшему package.json
+        pkg_path = marker_paths.get("package.json")
+        if pkg_path and pkg_path.exists():
             try:
                 import json
                 with open(pkg_path) as f:
@@ -853,22 +892,22 @@ def detect_project_type(project_dir: Path) -> str:
         return "nodejs"
     
     # Python ecosystem
-    python_markers = ["requirements.txt", "pyproject.toml", "setup.py", "Pipfile", "setup.cfg", "poetry.lock", " Pipfile.lock"]
-    if any(m in files for m in python_markers) or any("requirements" in f for f in files):
-        # Проверяем фреймворки
-        for req_file in ["requirements.txt", "requirements-dev.txt", "requirements-prod.txt"]:
-            req_path = project_dir / req_file
-            if req_path.exists():
+    python_markers = ["requirements.txt", "pyproject.toml", "setup.py", "Pipfile", "setup.cfg", "poetry.lock", "Pipfile.lock"]
+    if any(m in files for m in python_markers):
+        # Проверяем фреймворки по ближайшим файлам
+        for req_name in ["requirements.txt", "requirements-dev.txt", "requirements-prod.txt"]:
+            req_path = marker_paths.get(req_name)
+            if req_path and req_path.exists():
                 try:
                     content = req_path.read_text().lower()
                     if "django" in content: return "django"
                     if "flask" in content: return "flask"
                     if "fastapi" in content: return "fastapi"
                 except Exception:
-                    logger.debug("Failed to read %s in %s", req_file, project_dir)
+                    logger.debug("Failed to read %s in %s", req_name, project_dir)
 
-        pyproject = project_dir / "pyproject.toml"
-        if pyproject.exists():
+        pyproject = marker_paths.get("pyproject.toml")
+        if pyproject and pyproject.exists():
             try:
                 content = pyproject.read_text().lower()
                 if "django" in content: return "django"
@@ -876,7 +915,7 @@ def detect_project_type(project_dir: Path) -> str:
                 if "fastapi" in content: return "fastapi"
             except Exception:
                 logger.debug("Failed to read pyproject.toml in %s", project_dir)
-        
+
         return "python"
     
     # Docker
@@ -903,8 +942,8 @@ def detect_project_type(project_dir: Path) -> str:
     
     # PHP ecosystem
     if "composer.json" in files or "composer.lock" in files:
-        composer_path = project_dir / "composer.json"
-        if composer_path.exists():
+        composer_path = marker_paths.get("composer.json")
+        if composer_path and composer_path.exists():
             try:
                 import json
                 with open(composer_path) as f:

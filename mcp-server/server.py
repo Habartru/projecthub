@@ -180,8 +180,107 @@ class ProjectContext:
         return header + json.dumps(data, ensure_ascii=False, indent=2)
 
 
+SKIP_DIRS = frozenset({
+    'node_modules', '.venv', 'venv', '__pycache__',
+    '.idea', '.vscode', 'dist', 'build', 'target', 'out',
+    '.next', '.nuxt', 'coverage', '.pytest_cache',
+    '.mypy_cache', '.tox', '.ruff_cache', '.cache',
+})
+
+TYPE_MARKERS = {
+    'requirements.txt': 'python',
+    'pyproject.toml': 'python',
+    'setup.py': 'python',
+    'Pipfile': 'python',
+    'package.json': 'javascript',
+    'Cargo.toml': 'rust',
+    'go.mod': 'go',
+    'pom.xml': 'java',
+    'build.gradle': 'java',
+    'build.gradle.kts': 'java',
+    'composer.json': 'php',
+    'Gemfile': 'ruby',
+}
+
+DOCKER_FILES = frozenset({
+    'docker-compose.yml', 'docker-compose.yaml',
+    'docker-compose.dev.yml', 'docker-compose.prod.yml',
+    'docker-compose.override.yml',
+})
+
+README_NAMES = frozenset({'README.md', 'README.rst', 'README.txt', 'README'})
+ENV_EXAMPLE_NAMES = frozenset({'.env.example', '.env.sample', '.env.template'})
+
+MAX_WALK_DEPTH = 3
+
+
+def _walk_markers(root: Path, max_depth: int = MAX_WALK_DEPTH) -> dict:
+    """BFS-walk the project tree, collecting marker files and dirs.
+
+    Returns a dict with:
+      - git_dirs: list[Path] of .git dirs, ordered by depth (closest first)
+      - venv_dirs: list[Path] of directories containing pyvenv.cfg
+      - docker_files: list[Path] of Dockerfile / docker-compose.* files
+      - marker_paths: dict[basename -> Path] of first-found type markers
+      - readme_paths: list[Path] of README files
+      - env_files: list[Path] of .env.example / .env.sample files
+
+    BFS guarantees that the closest-to-root file wins ties.
+    """
+    results = {
+        'git_dirs': [],
+        'venv_dirs': [],
+        'docker_files': [],
+        'marker_paths': {},
+        'readme_paths': [],
+        'env_files': [],
+    }
+    if not root.is_dir():
+        return results
+
+    queue = [(root, 0)]
+    while queue:
+        current, depth = queue.pop(0)
+        try:
+            entries = list(current.iterdir())
+        except (OSError, PermissionError):
+            continue
+        for entry in entries:
+            name = entry.name
+            if entry.is_dir():
+                if name == '.git':
+                    results['git_dirs'].append(entry)
+                    continue
+                # Venv detection runs BEFORE skip/hidden checks so .venv is found
+                if (entry / 'pyvenv.cfg').exists():
+                    results['venv_dirs'].append(entry)
+                    continue
+                if name in SKIP_DIRS:
+                    continue
+                if name.startswith('.'):
+                    continue
+                if depth < max_depth:
+                    queue.append((entry, depth + 1))
+                continue
+            # Files
+            if name in TYPE_MARKERS and name not in results['marker_paths']:
+                results['marker_paths'][name] = entry
+            if name in DOCKER_FILES or name == 'Dockerfile' or name.startswith('Dockerfile.'):
+                results['docker_files'].append(entry)
+            if name in README_NAMES:
+                results['readme_paths'].append(entry)
+            if name in ENV_EXAMPLE_NAMES:
+                results['env_files'].append(entry)
+    return results
+
+
 def get_project_info(project_key: str, project_path: Path) -> dict:
-    """Collect full information about a project."""
+    """Collect full information about a project.
+
+    Walks up to MAX_WALK_DEPTH levels so monorepos and projects with code
+    in subdirs (e.g. root/backend/, root/services/api/) are detected
+    correctly.
+    """
     info = {
         "name": project_key,
         "id": ProjectContext.get_project_id(project_key),
@@ -203,112 +302,99 @@ def get_project_info(project_key: str, project_path: Path) -> dict:
     if not project_path.exists():
         return info
 
-    # Detect project type
-    if (project_path / "requirements.txt").exists() or (project_path / "pyproject.toml").exists():
-        info["type"].append("python")
-    if (project_path / "package.json").exists():
-        info["type"].append("javascript")
-    if (project_path / "Cargo.toml").exists():
-        info["type"].append("rust")
-    if (project_path / "go.mod").exists():
-        info["type"].append("go")
+    markers = _walk_markers(project_path)
 
-    # Git info
-    git_dir = project_path / ".git"
-    if git_dir.exists():
-        info["has_git"] = True
+    # Type detection (deterministic order, dedup via union of TYPE_MARKERS)
+    found_types = set()
+    for name, ptype in TYPE_MARKERS.items():
+        if name in markers['marker_paths']:
+            found_types.add(ptype)
+    for t in ['python', 'javascript', 'rust', 'go', 'java', 'php', 'ruby']:
+        if t in found_types:
+            info['type'].append(t)
+
+    # Git info — use .git closest to root
+    if markers['git_dirs']:
+        info['has_git'] = True
+        git_dir = min(markers['git_dirs'], key=lambda p: len(p.parts))
+        git_root = git_dir.parent
         try:
             result = subprocess.run(
                 ["git", "branch", "--show-current"],
-                cwd=project_path,
+                cwd=git_root,
                 capture_output=True,
                 text=True,
-                timeout=5
+                timeout=5,
             )
-            info["git_branch"] = result.stdout.strip() or "detached"
+            info['git_branch'] = result.stdout.strip() or "detached"
         except Exception:
             pass
 
-    # Virtual environment
-    for venv_name in [".venv", "venv"]:
-        venv_path = project_path / venv_name
-        if venv_path.exists():
-            info["has_venv"] = True
-            pyvenv_cfg = venv_path / "pyvenv.cfg"
-            if pyvenv_cfg.exists():
-                try:
-                    content = pyvenv_cfg.read_text()
-                    for line in content.splitlines():
-                        if "version" in line.lower():
-                            info["venv_python"] = line.split("=")[1].strip()
-                            break
-                except Exception:
-                    pass
-            break
-
-    # Docker
-    info["has_docker"] = (
-        (project_path / "docker-compose.yml").exists() or
-        (project_path / "docker-compose.yaml").exists() or
-        (project_path / "Dockerfile").exists()
-    )
-
-    # Dependencies
-    req_file = project_path / "requirements.txt"
-    if req_file.exists():
-        try:
-            deps = []
-            for line in req_file.read_text().splitlines():
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    deps.append(line)
-            info["dependencies"]["python"] = deps[:20]
-        except Exception:
-            pass
-
-    pkg_file = project_path / "package.json"
-    if pkg_file.exists():
-        try:
-            pkg = json.loads(pkg_file.read_text())
-            info["dependencies"]["npm"] = list(pkg.get("dependencies", {}).keys())[:20]
-        except Exception:
-            pass
-
-    # ENV variables (names only, NOT values!)
-    for env_file in [".env.example", ".env.sample", ".env"]:
-        env_path = project_path / env_file
-        if env_path.exists():
+    # Virtual environment — closest venv wins
+    if markers['venv_dirs']:
+        info['has_venv'] = True
+        venv_path = min(markers['venv_dirs'], key=lambda p: len(p.parts))
+        pyvenv_cfg = venv_path / "pyvenv.cfg"
+        if pyvenv_cfg.exists():
             try:
-                for line in env_path.read_text().splitlines():
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        var_name = line.split("=")[0].strip()
-                        if var_name not in info["env_vars_required"]:
-                            info["env_vars_required"].append(var_name)
+                for line in pyvenv_cfg.read_text().splitlines():
+                    if "version" in line.lower() and "=" in line:
+                        info['venv_python'] = line.split("=", 1)[1].strip()
+                        break
             except Exception:
                 pass
 
-    # README
-    for readme in ["README.md", "README.txt", "README"]:
-        if (project_path / readme).exists():
-            info["readme_exists"] = True
-            break
+    # Docker
+    info['has_docker'] = bool(markers['docker_files'])
 
-    # Last modified time
+    # Dependencies — use closest (shortest path) marker file
+    req_path = markers['marker_paths'].get('requirements.txt')
+    if req_path:
+        try:
+            deps = []
+            for line in req_path.read_text().splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    deps.append(line)
+            info['dependencies']['python'] = deps[:20]
+        except Exception:
+            pass
+
+    pkg_path = markers['marker_paths'].get('package.json')
+    if pkg_path:
+        try:
+            pkg = json.loads(pkg_path.read_text())
+            info['dependencies']['npm'] = list(pkg.get("dependencies", {}).keys())[:20]
+        except Exception:
+            pass
+
+    # ENV variables (names only, never values)
+    for env_path in markers['env_files']:
+        try:
+            for line in env_path.read_text().splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    var_name = line.split("=", 1)[0].strip()
+                    if var_name and var_name not in info['env_vars_required']:
+                        info['env_vars_required'].append(var_name)
+        except Exception:
+            pass
+
+    # README
+    info['readme_exists'] = bool(markers['readme_paths'])
+
+    # Last modified (of the project root, not walked files)
     try:
         stat = project_path.stat()
         info["last_modified"] = datetime.fromtimestamp(stat.st_mtime).isoformat()
     except Exception:
         pass
 
-    # File count (excluding node_modules, venv, etc.)
+    # File count
     try:
         count = 0
-        for root, dirs, files in os.walk(project_path):
-            dirs[:] = [d for d in dirs if d not in [
-                'node_modules', '.venv', 'venv', '__pycache__',
-                '.git', '.idea', '.vscode', 'dist', 'build'
-            ]]
+        for walk_root, dirs, files in os.walk(project_path):
+            dirs[:] = [d for d in dirs if d not in SKIP_DIRS and d != '.git']
             count += len(files)
             if count > 1000:
                 break

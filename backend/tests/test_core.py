@@ -131,6 +131,119 @@ def test_detect_unknown(tmp_path):
     assert detect_project_type(tmp_path) in ("", "unknown")
 
 
+# ── Subdirectory detection (fix/subdir-detection) ───────────────────────────
+
+def test_detect_fastapi_in_subdir(tmp_path):
+    """Monorepo-style: requirements.txt with fastapi is in backend/ subdir."""
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from main import detect_project_type
+    (tmp_path / "README.md").write_text("root")
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    (backend / "requirements.txt").write_text("fastapi==0.115.0\npydantic\n")
+    assert detect_project_type(tmp_path) == "fastapi"
+
+
+def test_detect_nuxt_in_subdir(tmp_path):
+    """Nuxt project where package.json is in frontend/ subdir (depth 1)."""
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from main import detect_project_type
+    frontend = tmp_path / "frontend"
+    frontend.mkdir()
+    (frontend / "package.json").write_text(json.dumps({
+        "dependencies": {"vue": "^3.0.0"}
+    }))
+    assert detect_project_type(tmp_path) == "vue"
+
+
+def test_detect_docker_in_subdir(tmp_path):
+    """Dockerfile deep in subdirs (depth 2)."""
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from main import detect_project_type
+    infra = tmp_path / "infra" / "image"
+    infra.mkdir(parents=True)
+    (infra / "Dockerfile").write_text("FROM alpine\n")
+    assert detect_project_type(tmp_path) == "docker"
+
+
+def test_detect_secscan_like_structure(tmp_path):
+    """Mimics SecScan: no markers at root; backend/requirements.txt has fastapi,
+    frontend/package.json has nuxt."""
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from main import detect_project_type
+    secscan = tmp_path / "secscan"
+    (secscan / "backend").mkdir(parents=True)
+    (secscan / "frontend").mkdir(parents=True)
+    (secscan / "backend" / "requirements.txt").write_text("fastapi\nuvicorn\n")
+    (secscan / "frontend" / "package.json").write_text(json.dumps({
+        "dependencies": {"nuxt": "^3.0.0"}
+    }))
+    # Should detect as nextjs-absent, fallthrough → vue (nuxt isn't in branch list) or fastapi
+    # Closest to root is package.json in secscan/frontend/ — but both are at depth 2.
+    # BFS + sorted makes behavior deterministic: the outcome depends on iteration order.
+    # We only assert it finds *something* Python/JS-specific, not "unknown".
+    result = detect_project_type(tmp_path)
+    assert result not in ("", "unknown"), f"expected stack, got {result}"
+
+
+def test_collect_project_files_skips_junk(tmp_path):
+    """node_modules / venv / __pycache__ must be excluded from collection."""
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from main import _collect_project_files
+    (tmp_path / "app.py").write_text("print(1)")
+    (tmp_path / "node_modules" / "junk").mkdir(parents=True)
+    (tmp_path / "node_modules" / "junk" / "index.js").write_text("x")
+    (tmp_path / "venv" / "lib").mkdir(parents=True)
+    (tmp_path / "venv" / "lib" / "thing.py").write_text("x")
+    (tmp_path / ".git").mkdir()
+    (tmp_path / ".git" / "HEAD").write_text("ref")
+    files, _all, _marks = _collect_project_files(tmp_path)
+    assert "app.py" in files
+    assert "index.js" not in files
+    assert "thing.py" not in files
+    assert "HEAD" not in files
+
+
+def test_collect_project_files_bfs_closest_wins(tmp_path):
+    """When same marker exists at depth 0 and depth 2, marker_paths should
+    return the depth-0 one (closest to root)."""
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from main import _collect_project_files
+    (tmp_path / "package.json").write_text('{"name":"root"}')
+    sub = tmp_path / "services" / "api"
+    sub.mkdir(parents=True)
+    (sub / "package.json").write_text('{"name":"api"}')
+    _files, _all, marker_paths = _collect_project_files(tmp_path)
+    assert marker_paths["package.json"].parent == tmp_path
+
+
+def test_collect_project_files_depth_limit(tmp_path):
+    """Markers deeper than max_depth must not be found."""
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from main import _collect_project_files
+    deep = tmp_path / "a" / "b" / "c" / "d" / "e"
+    deep.mkdir(parents=True)
+    (deep / "package.json").write_text("{}")
+    _files, _all, marker_paths = _collect_project_files(tmp_path, max_depth=3)
+    assert "package.json" not in marker_paths
+
+
+def test_detect_root_still_wins(tmp_path):
+    """Existing behaviour preserved: marker at root is detected immediately."""
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from main import detect_project_type
+    (tmp_path / "Cargo.toml").write_text("[package]\nname='x'\n")
+    assert detect_project_type(tmp_path) == "rust"
+
+
 # ── Database: CASCADE DELETE ─────────────────────────────────────────────────
 
 def test_cascade_delete(tmp_path):
