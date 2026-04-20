@@ -4,11 +4,17 @@
 dev_aliases.sh
 dashboard.sh
 
-# Internal development docs (PRD, specs, roadmaps)
+# Internal development docs (PRD, specs, roadmaps, personal plans)
 docs/PRD.md
 docs/ROADMAP.md
 docs/TECH_SPEC.md
 docs/settings-prd.md
+docs/superpowers/
+
+# IDE-specific workspace configs (personal Cascade/Windsurf rules)
+.windsurf/
+.cursor/
+.codeium/
 
 # Duplicate requirements
 requirements.txt
