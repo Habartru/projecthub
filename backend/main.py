@@ -2303,15 +2303,21 @@ def reset_settings():
 
 @app.get("/api/activity/heatmap")
 def activity_heatmap():
-    """Return daily open counts for last 84 days (12 weeks) for heatmap."""
+    """Return daily open counts for the last ~53 weeks (GitHub-style contribution grid).
+
+    The grid starts on the Sunday of the week 52 weeks ago so the last column
+    contains the current week. Total days returned: 53 * 7 = 371 (some leading
+    days will have count=0 if they are before the first tracked day).
+    """
+    from datetime import date, timedelta
+
     conn = get_db()
     cursor = conn.cursor()
     # Use activity_log for accurate per-open tracking
-    # Use localtime to match Python's date.today()
     cursor.execute("""
         SELECT DATE(opened_at, 'localtime') as day, COUNT(*) as count
         FROM activity_log
-        WHERE opened_at >= DATE('now', '-84 days')
+        WHERE opened_at >= DATE('now', '-371 days')
         GROUP BY DATE(opened_at, 'localtime')
         ORDER BY day
     """)
@@ -2324,7 +2330,7 @@ def activity_heatmap():
             SELECT DATE(last_opened, 'localtime') as day, COUNT(*) as count
             FROM projects
             WHERE last_opened IS NOT NULL
-              AND last_opened >= DATE('now', '-84 days')
+              AND last_opened >= DATE('now', '-371 days')
             GROUP BY DATE(last_opened, 'localtime')
             ORDER BY day
         """)
@@ -2333,12 +2339,17 @@ def activity_heatmap():
 
     conn.close()
 
-    # Fill all 84 days
-    from datetime import date, timedelta
-    result = []
     today = date.today()
-    for i in range(83, -1, -1):
-        d = (today - timedelta(days=i)).isoformat()
+    # Align grid: last column is the week containing today, rows = Sun..Sat
+    # Python weekday: Mon=0..Sun=6 → shift so Sunday=0
+    sunday_offset = (today.weekday() + 1) % 7
+    last_sunday = today - timedelta(days=sunday_offset)
+    start = last_sunday - timedelta(weeks=52)  # 53 columns total including current week
+
+    result = []
+    total_days = 53 * 7
+    for i in range(total_days):
+        d = (start + timedelta(days=i)).isoformat()
         result.append({"date": d, "count": data.get(d, 0)})
     return result
 
