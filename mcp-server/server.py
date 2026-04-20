@@ -247,12 +247,23 @@ def _walk_markers(root: Path, max_depth: int = MAX_WALK_DEPTH) -> dict:
             continue
         for entry in entries:
             name = entry.name
-            if entry.is_dir():
+            # Any stat-inducing call can fail with PermissionError on
+            # unreadable subtrees (e.g. virtualenvs created by other users,
+            # FUSE mounts, etc). Skip such entries gracefully.
+            try:
+                is_directory = entry.is_dir()
+            except OSError:
+                continue
+            if is_directory:
                 if name == '.git':
                     results['git_dirs'].append(entry)
                     continue
                 # Venv detection runs BEFORE skip/hidden checks so .venv is found
-                if (entry / 'pyvenv.cfg').exists():
+                try:
+                    has_pyvenv = (entry / 'pyvenv.cfg').exists()
+                except OSError:
+                    has_pyvenv = False
+                if has_pyvenv:
                     results['venv_dirs'].append(entry)
                     continue
                 if name in SKIP_DIRS:
