@@ -91,8 +91,8 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS projects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            path TEXT NOT NULL,
+            name TEXT NOT NULL,
+            path TEXT UNIQUE NOT NULL,
             category TEXT NOT NULL,
             display_name TEXT NOT NULL,
             description TEXT DEFAULT '',
@@ -204,6 +204,9 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_commands_project_id ON commands(project_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_activity_log_opened_at ON activity_log(opened_at)")
 
+    # Migrate existing DB: move UNIQUE constraint from name → path
+    _migrate_projects_unique_path(cursor)
+
     # Migrate existing DB: recreate notes/commands with ON DELETE CASCADE
     _migrate_cascade(cursor)
 
@@ -218,6 +221,66 @@ def init_db():
 
     conn.commit()
     conn.close()
+
+def _migrate_projects_unique_path(cursor):
+    """Migrate projects table: move UNIQUE constraint from name → path (one-time).
+
+    Old schema had `name TEXT UNIQUE NOT NULL` which caused IntegrityError
+    when two directories in different categories shared a folder name
+    (e.g. GODOT/assets + games/assets). The real unique identifier is path.
+    """
+    # Check if table exists at all (fresh install will have correct schema)
+    cursor.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='projects'")
+    row = cursor.fetchone()
+    if not row:
+        return
+    schema_sql = row[0] or ''
+    # Already migrated if path has UNIQUE and name does not
+    if 'path TEXT UNIQUE' in schema_sql and 'name TEXT UNIQUE' not in schema_sql:
+        return
+    # Only run when the old constraint is actually present
+    if 'name TEXT UNIQUE' not in schema_sql:
+        return
+
+    # Deduplicate by path first (keep lowest id per path) to satisfy new UNIQUE(path)
+    cursor.execute('''
+        DELETE FROM projects
+        WHERE id NOT IN (
+            SELECT MIN(id) FROM projects GROUP BY path
+        )
+    ''')
+
+    cursor.execute('''
+        CREATE TABLE projects_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            path TEXT UNIQUE NOT NULL,
+            category TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            status TEXT DEFAULT 'active',
+            tags TEXT DEFAULT '[]',
+            project_type TEXT DEFAULT '',
+            label TEXT DEFAULT NULL,
+            sort_order INTEGER DEFAULT 0,
+            last_opened TIMESTAMP,
+            open_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    cursor.execute('''
+        INSERT INTO projects_new
+        (id, name, path, category, display_name, description, status, tags,
+         project_type, label, sort_order, last_opened, open_count, created_at)
+        SELECT id, name, path, category, display_name, description, status, tags,
+               project_type, label, sort_order, last_opened, open_count, created_at
+        FROM projects
+    ''')
+    cursor.execute("DROP TABLE projects")
+    cursor.execute("ALTER TABLE projects_new RENAME TO projects")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_projects_path ON projects(path)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_projects_category ON projects(category)")
+
 
 def _migrate_cascade(cursor):
     """Migrate notes/commands tables to add ON DELETE CASCADE (one-time)."""
