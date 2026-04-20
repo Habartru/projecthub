@@ -1,5 +1,9 @@
 # ProjectHub
 
+<p align="center">
+  <img src="docs/assets/projecthub.png" alt="ProjectHub — self-hosted developer dashboard with AI memory, activity heatmap, and live Docker status" />
+</p>
+
 > Your self-hosted AI-powered developer hub. Manage all local projects, connect any AI IDE in one click, track Git & Docker, and give your AI agent persistent memory across sessions.
 
 ```bash
