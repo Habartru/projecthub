@@ -6,7 +6,7 @@ Thank you for your interest in contributing to ProjectHub! We welcome contributi
 
 ### Reporting Bugs
 
-- Check if the bug has already been reported in [Issues](https://github.com/yourusername/projecthub/issues)
+- Check if the bug has already been reported in [Issues](https://github.com/Habartru/projecthub/issues)
 - If not, create a new issue with:
   - Clear title and description
   - Steps to reproduce
@@ -16,7 +16,7 @@ Thank you for your interest in contributing to ProjectHub! We welcome contributi
 
 ### Suggesting Features
 
-- Open a [Discussion](https://github.com/yourusername/projecthub/discussions) first
+- Open a [Discussion](https://github.com/Habartru/projecthub/discussions) first
 - Describe the feature and its use case
 - Wait for community feedback before implementing
 
@@ -55,7 +55,7 @@ Thank you for your interest in contributing to ProjectHub! We welcome contributi
 ## Development Setup
 
 ```bash
-git clone https://github.com/yourusername/projecthub.git
+git clone https://github.com/Habartru/projecthub.git
 cd projecthub
 python -m venv venv
 source venv/bin/activate
@@ -67,6 +67,6 @@ Visit `http://localhost:8472`
 
 ## Questions?
 
-Join our [Discussions](https://github.com/yourusername/projecthub/discussions) or open an issue.
+Join our [Discussions](https://github.com/Habartru/projecthub/discussions) or open an issue.
 
 Thank you for making ProjectHub better! 🚀
