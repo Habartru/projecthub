@@ -1969,26 +1969,38 @@ def open_project_folder(project_id: int):
     """Открыть папку проекта в файловом менеджере"""
     conn = get_db()
     cursor = conn.cursor()
-    
+
     cursor.execute("SELECT path FROM projects WHERE id = ?", (project_id,))
     row = cursor.fetchone()
-    conn.close()
-    
+
     if not row:
+        conn.close()
         raise HTTPException(status_code=404, detail="Project not found")
-    
+
     path = row[0]
-    
+
     # Открываем в файловом менеджере (xdg-open для Linux)
     try:
         subprocess.Popen(
             ["xdg-open", path],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
-        return {"status": "opened", "path": path}
     except Exception as e:
+        conn.close()
         logger.error("Failed to open folder for project %s: %s", project_id, e)
         raise HTTPException(status_code=500, detail="Failed to open folder")
+
+    # Log activity so heatmap & stats reflect folder opens too
+    cursor.execute('''
+        UPDATE projects
+        SET open_count = open_count + 1, last_opened = CURRENT_TIMESTAMP
+        WHERE id = ?
+    ''', (project_id,))
+    cursor.execute("INSERT INTO activity_log (project_id) VALUES (?)", (project_id,))
+    conn.commit()
+    conn.close()
+
+    return {"status": "opened", "path": path}
 
 # ==================== SETTINGS API ====================
 
