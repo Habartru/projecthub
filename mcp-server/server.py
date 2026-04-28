@@ -596,7 +596,12 @@ def compile_daily_to_project(project_name: str, entries: list[dict]) -> str:
 
 
 def update_index():
-    """Rebuild index.md from all project and concept files."""
+    """Rebuild index.md from all project, concept, and daily-log files.
+
+    Every section is rebuilt from the actual files on disk so daily logs and
+    project articles created outside of compile_knowledge (e.g. by
+    log_session_insight) never end up as orphan nodes in Obsidian's graph.
+    """
     ensure_knowledge_dirs()
 
     projects_section = ""
@@ -614,10 +619,23 @@ def update_index():
             display = f.stem.replace("-", " ").replace("_", " ")
             concepts_section += f"- [[concepts/{f.stem}|{display}]]\n"
 
+    daily_section = ""
+    if DAILY_DIR.exists():
+        # Newest first — matches reverse-chronological reading order.
+        daily_files = sorted(
+            (f for f in DAILY_DIR.glob("*.md") if re.fullmatch(r"\d{4}-\d{2}-\d{2}", f.stem)),
+            key=lambda p: p.stem,
+            reverse=True,
+        )
+        for f in daily_files:
+            daily_section += f"- [[daily/{f.stem}]]\n"
+
     if not projects_section:
         projects_section = "*(пока пусто — появится после первого log_session_insight)*\n"
     if not concepts_section:
         concepts_section = "*(пока пусто)*\n"
+    if not daily_section:
+        daily_section = "*(пока пусто)*\n"
 
     content = INDEX_FILE.read_text() if INDEX_FILE.exists() else ""
 
@@ -630,6 +648,12 @@ def update_index():
     content = re.sub(
         r"<!-- CONCEPTS_INDEX_START -->.*?<!-- CONCEPTS_INDEX_END -->",
         f"<!-- CONCEPTS_INDEX_START -->\n{concepts_section}<!-- CONCEPTS_INDEX_END -->",
+        content,
+        flags=re.DOTALL
+    )
+    content = re.sub(
+        r"<!-- DAILY_INDEX_START -->.*?<!-- DAILY_INDEX_END -->",
+        f"<!-- DAILY_INDEX_START -->\n{daily_section}<!-- DAILY_INDEX_END -->",
         content,
         flags=re.DOTALL
     )
@@ -1159,9 +1183,16 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
             daily_path = get_daily_log_path()
             if not daily_path.exists():
+                # Even without a fresh daily log, refresh the index so any
+                # daily/project files added since the last run are linked
+                # from index.md instead of becoming orphans in Obsidian.
+                update_index()
                 return [TextContent(
                     type="text",
-                    text=f"No daily log for today ({daily_path.name}). Nothing to compile."
+                    text=(
+                        f"No daily log for today ({daily_path.name}); nothing new to compile.\n"
+                        f"Index refreshed from existing files: {INDEX_FILE}"
+                    )
                 )]
 
             content_raw = daily_path.read_text()
