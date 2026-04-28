@@ -25,9 +25,15 @@ import docker
 logger = logging.getLogger(__name__)
 
 # Конфигурация
+__version__ = "2.0.0"
+STARTED_AT = datetime.now()
 PROJECTS_ROOT = Path.home() / "Projects"
 PROJECTS_ROOT.mkdir(parents=True, exist_ok=True)
 DB_PATH = PROJECTS_ROOT / ".projecthub.db"
+
+# Activity log retention: drop entries older than this on startup so the
+# table doesn't grow unbounded over years of use.
+ACTIVITY_LOG_RETENTION_DAYS = 730  # ~2 years
 
 # Brain / Knowledge base
 BRAIN_DIR = Path.home() / "Projects" / "@memory" / "brain"
@@ -1294,14 +1300,32 @@ def sync_projects():
     conn.commit()
     conn.close()
 
+def _prune_activity_log():
+    """Remove activity_log rows older than the retention window."""
+    try:
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM activity_log WHERE opened_at < DATE('now', ?)",
+            (f'-{ACTIVITY_LOG_RETENTION_DAYS} days',),
+        )
+        if cursor.rowcount:
+            logger.info("Pruned %d old activity_log rows", cursor.rowcount)
+        conn.commit()
+        conn.close()
+    except Exception:
+        logger.exception("activity_log prune failed (non-fatal)")
+
+
 # FastAPI приложение
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    _prune_activity_log()
     sync_projects()
     yield
 
-app = FastAPI(title="ProjectHub", lifespan=lifespan)
+app = FastAPI(title="ProjectHub", version=__version__, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -1309,6 +1333,37 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Health check — used by systemd watchdog and external monitors.
+# Verifies the DB is reachable; returns version + uptime for observability.
+@app.get("/health")
+@app.get("/api/health")
+def health():
+    db_ok = True
+    db_error: Optional[str] = None
+    project_count: Optional[int] = None
+    try:
+        conn = get_db()
+        project_count = conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0]
+        conn.close()
+    except Exception as exc:
+        db_ok = False
+        db_error = str(exc)
+        logger.exception("Health check DB probe failed")
+
+    payload = {
+        "status": "ok" if db_ok else "degraded",
+        "version": __version__,
+        "uptime_seconds": int((datetime.now() - STARTED_AT).total_seconds()),
+        "db": {"ok": db_ok, "path": str(DB_PATH), "projects": project_count},
+    }
+    if db_error:
+        payload["db"]["error"] = db_error
+    if not db_ok:
+        raise HTTPException(status_code=503, detail=payload)
+    return payload
+
 
 # API Endpoints
 @app.get("/api/projects")

@@ -192,13 +192,29 @@ if command -v systemctl &>/dev/null; then
   cat > "$SVCDIR/projecthub.service" <<SVC
 [Unit]
 Description=ProjectHub Dashboard
+Documentation=https://github.com/Habartru/projecthub
 After=network.target
 
 [Service]
+Type=simple
 WorkingDirectory=$INSTALL_DIR
 ExecStart=$VENV/bin/python $INSTALL_DIR/backend/main.py
-Restart=on-failure
+
+# Auto-recovery: keep the service alive on crashes, hangs, or OOMs.
+Restart=always
 RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+# Resource limits to keep the dashboard from accidentally hogging the box.
+MemoryMax=512M
+TasksMax=64
+
+# Sandboxing — only directives that work in user-mode systemd
+# (capability-restricting ones like NoNewPrivileges / Restrict* require
+# CAP_SYS_ADMIN and fail with status 218/CAPABILITIES under --user).
+PrivateTmp=true
+LockPersonality=true
 
 [Install]
 WantedBy=default.target
