@@ -12,14 +12,15 @@ import sqlite3
 import subprocess
 from pathlib import Path
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Literal
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, FileResponse
-from pydantic import BaseModel
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi.exceptions import RequestValidationError
+from pydantic import BaseModel, Field
 import docker
 
 import sys as _sys
@@ -30,6 +31,7 @@ from projecthub_memory_core import (  # noqa: E402
     compile_daily_to_project,
     load_project_knowledge,
     get_project_knowledge_path,
+    get_daily_log_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -1352,6 +1354,41 @@ app.add_middleware(
 )
 
 
+@app.exception_handler(RequestValidationError)
+async def _memory_validation_handler(request, exc):
+    if request.url.path.startswith("/api/memory/"):
+        return JSONResponse(status_code=400, content={"detail": exc.errors()})
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
+
+class MemoryInsightIn(BaseModel):
+    project: str
+    insight_type: Literal["decision", "bug", "pattern", "gotcha", "stack", "qa", "session_summary", "other"]
+    content: str = Field(min_length=1, max_length=4000)
+    tags: list[str] = []
+    source: Optional[str] = None
+    session_id: Optional[str] = None
+    metadata: dict = {}
+
+
+def _project_exists_or_scratch(project: str) -> bool:
+    if project == "system/scratch":
+        return True
+    if "/" in project:
+        category, name = project.split("/", 1)
+    else:
+        category, name = "", project
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT path FROM projects WHERE category = ? AND name = ?",
+        (category, name),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return row is not None and row[0] and os.path.exists(row[0])
+
+
 # Health check — used by systemd watchdog and external monitors.
 # Verifies the DB is reachable; returns version + uptime for observability.
 @app.get("/health")
@@ -1456,6 +1493,42 @@ def memory_projects():
         result.append({"name": full_name, "path": os.path.abspath(path)})
 
     return {"projects": result, "total": len(result)}
+
+
+@app.post("/api/memory/insight")
+def memory_insight_post(payload: MemoryInsightIn):
+    """Write an insight to the brain vault.
+
+    Same primitives as MCP log_session_insight — backed by the shared core.
+    """
+    if not _project_exists_or_scratch(payload.project):
+        raise HTTPException(status_code=404, detail=f"Unknown project: {payload.project}")
+
+    try:
+        append_to_daily_log(
+            project=payload.project,
+            insight_type=payload.insight_type,
+            content=payload.content,
+            tags=payload.tags,
+        )
+        article_path = compile_daily_to_project(
+            payload.project,
+            [{
+                "type": payload.insight_type,
+                "timestamp": datetime.now().strftime("%H:%M"),
+                "content": payload.content,
+                "tags": payload.tags,
+            }],
+        )
+    except OSError as e:
+        raise HTTPException(status_code=503, detail=f"Vault write failed: {e}")
+
+    return {
+        "status": "saved",
+        "daily_log": str(get_daily_log_path()),
+        "knowledge_article": article_path,
+        "compiled": True,
+    }
 
 
 @app.post("/api/projects/sync")

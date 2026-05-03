@@ -61,3 +61,65 @@ def test_memory_projects_returns_only_existing_paths(client, tmp_path):
     for p in data["projects"]:
         assert os.path.isabs(p["path"])
         assert os.path.exists(p["path"])
+
+
+def test_post_insight_writes_to_daily_log(client, tmp_path):
+    real_dir = tmp_path / "p"
+    real_dir.mkdir()
+    import sqlite3
+    conn = sqlite3.connect(os.environ["PROJECTHUB_DB_PATH"])
+    conn.execute(
+        "INSERT INTO projects (name, category, path, display_name, created_at) VALUES (?, ?, ?, ?, datetime('now'))",
+        ("a", "x", str(real_dir), ""),
+    )
+    conn.commit()
+    conn.close()
+
+    resp = client.post("/api/memory/insight", json={
+        "project": "x/a",
+        "insight_type": "decision",
+        "content": "Use approach Z because of constraint Q.",
+        "tags": ["arch"],
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "saved"
+    assert data["compiled"] is True
+    assert "daily" in data["daily_log"]
+    assert "Use approach Z" in Path(data["daily_log"]).read_text()
+
+
+def test_post_insight_rejects_unknown_project(client):
+    resp = client.post("/api/memory/insight", json={
+        "project": "ghost/missing",
+        "insight_type": "decision",
+        "content": "ignored",
+    })
+    assert resp.status_code == 404
+
+
+def test_post_insight_accepts_system_scratch(client):
+    resp = client.post("/api/memory/insight", json={
+        "project": "system/scratch",
+        "insight_type": "decision",
+        "content": "Anywhere thought.",
+    })
+    assert resp.status_code == 200
+
+
+def test_post_insight_rejects_oversized_content(client):
+    resp = client.post("/api/memory/insight", json={
+        "project": "system/scratch",
+        "insight_type": "decision",
+        "content": "x" * 4001,
+    })
+    assert resp.status_code == 400
+
+
+def test_post_insight_rejects_invalid_type(client):
+    resp = client.post("/api/memory/insight", json={
+        "project": "system/scratch",
+        "insight_type": "garbage",
+        "content": "ok",
+    })
+    assert resp.status_code == 400
