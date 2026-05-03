@@ -355,6 +355,7 @@ def init_default_editors(cursor):
         ('vscode', 'VS Code', 'code', '--folder-uri {path}', '/static/icons/vscode.png', '#0078d4', 1, 1, 0),
         ('cursor', 'Cursor', 'cursor', '{path}', '/static/icons/cursor.png', '#f97316', 2, 1, 0),
         ('antigravity', 'Antigravity', 'antigravity', '{path}', '/static/icons/antigravity.png', '#8b5cf6', 3, 1, 0),
+        ('hermes', 'Hermes', 'gnome-terminal', '-- bash -c "cd {path} && exec hermes"', '/static/icons/hermes.svg', '#a78bfa', 200, 1, 0),
     ]
     
     for editor in default_editors:
