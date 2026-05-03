@@ -102,6 +102,33 @@ class ProjectHubProvider(MemoryProvider):
             "User persona/preferences → built-in memory. Unsure → projecthub_remember."
         )
 
+    def prefetch(self, query: str, *, session_id: str = "") -> str:
+        """Return cached project knowledge as context for the upcoming turn.
+
+        Cached after the first call per session — knowledge base is static
+        within a session.
+        """
+        if self._is_scratch:
+            return ""
+        if self._cached_recall is not None:
+            return self._cached_recall
+        try:
+            data = self._client.recall(self._current_project)
+            text = data.get("context", "") if isinstance(data, dict) else ""
+            if text:
+                self._cached_recall = (
+                    f"<projecthub_recall project='{self._current_project}'>\n"
+                    f"{text}\n"
+                    f"</projecthub_recall>"
+                )
+            else:
+                self._cached_recall = ""
+            return self._cached_recall
+        except Exception as e:
+            logger.warning("prefetch failed: %s", e)
+            self._cached_recall = ""
+            return ""
+
     def get_tool_schemas(self) -> List[Dict[str, Any]]:
         from tools import ALL_SCHEMAS
         return ALL_SCHEMAS

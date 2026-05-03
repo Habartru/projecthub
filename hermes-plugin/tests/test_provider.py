@@ -156,3 +156,29 @@ def test_on_session_switch_no_reset_keeps_state(provider):
     assert provider._current_project == "kept/project"
     assert provider._is_scratch is False
     assert provider._cached_recall == "still here"
+
+
+def test_prefetch_caches_recall(provider):
+    provider._current_project = "x/y"
+    provider._is_scratch = False
+    cli = MagicMock()
+    cli.recall.return_value = {"context": "stuff", "exists": True, "char_count": 5}
+    provider._client = cli
+
+    out1 = provider.prefetch("anything")
+    out2 = provider.prefetch("different query")
+
+    assert "stuff" in out1
+    assert out1 == out2
+    cli.recall.assert_called_once()  # cached on second call
+
+
+def test_prefetch_skips_in_scratch_mode(provider):
+    provider._current_project = "system/scratch"
+    provider._is_scratch = True
+    cli = MagicMock()
+    provider._client = cli
+
+    out = provider.prefetch("anything")
+    assert out == ""
+    cli.recall.assert_not_called()
