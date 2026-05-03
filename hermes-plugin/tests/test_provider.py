@@ -182,3 +182,90 @@ def test_prefetch_skips_in_scratch_mode(provider):
     out = provider.prefetch("anything")
     assert out == ""
     cli.recall.assert_not_called()
+
+
+def test_on_session_end_calls_curator_and_posts(provider):
+    provider._current_project = "x/y"
+    provider._is_scratch = False
+    provider._session_id = "s"
+    cli = MagicMock()
+    cli.remember.return_value = {"status": "saved"}
+    provider._client = cli
+
+    # Mock the curator: returns 2 insights
+    with patch.object(provider, "_run_curator") as cur:
+        cur.return_value = [
+            {"insight_type": "decision", "content": "A", "tags": ["t1"]},
+            {"insight_type": "pattern", "content": "B", "tags": []},
+        ]
+        provider.on_session_end([
+            {"role": "user", "content": "hi"},
+            {"role": "assistant", "content": "ok"},
+        ])
+
+    assert cli.remember.call_count == 2
+    args0 = cli.remember.call_args_list[0]
+    # insight_type and content come through (positional or keyword)
+    kw0 = args0.kwargs
+    pos0 = args0.args
+    insight_type_0 = kw0.get("insight_type") or (pos0[1] if len(pos0) > 1 else None)
+    content_0 = kw0.get("content") or (pos0[2] if len(pos0) > 2 else None)
+    tags_0 = kw0.get("tags") or (pos0[3] if len(pos0) > 3 else [])
+    assert insight_type_0 == "decision"
+    assert "A" in content_0
+    assert any("auto-curated" in t for t in tags_0)
+
+
+def test_on_session_end_swallows_curator_exception(provider):
+    provider._current_project = "x/y"
+    provider._is_scratch = False
+    cli = MagicMock()
+    provider._client = cli
+    with patch.object(provider, "_run_curator", side_effect=RuntimeError("nope")):
+        # Must not raise
+        provider.on_session_end([{"role": "user", "content": "hi"}])
+    cli.remember.assert_not_called()
+
+
+def test_on_memory_write_mirrors_project_content(provider):
+    provider._current_project = "x/y"
+    provider._is_scratch = False
+    cli = MagicMock()
+    provider._client = cli
+
+    provider.on_memory_write(
+        action="add",
+        target="memory",
+        content="The /api/auth endpoint of x/y returns 401 when token expires.",
+        metadata={"write_origin": "assistant_tool"},
+    )
+    cli.remember.assert_called_once()
+    kwargs = cli.remember.call_args.kwargs
+    args = cli.remember.call_args.args
+    project_arg = args[0] if args else kwargs.get("project")
+    assert project_arg == "x/y"
+
+
+def test_on_memory_write_skips_self_origin(provider):
+    """Avoid double-write loop: writes from this plugin must not be mirrored."""
+    provider._current_project = "x/y"
+    provider._is_scratch = False
+    cli = MagicMock()
+    provider._client = cli
+
+    provider.on_memory_write(
+        action="add",
+        target="memory",
+        content="anything",
+        metadata={"write_origin": "projecthub_plugin"},
+    )
+    cli.remember.assert_not_called()
+
+
+def test_on_memory_write_skips_scratch_mode(provider):
+    provider._is_scratch = True
+    cli = MagicMock()
+    provider._client = cli
+
+    provider.on_memory_write("add", "memory", "x", {"write_origin": "assistant_tool"})
+    cli.remember.assert_not_called()

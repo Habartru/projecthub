@@ -129,6 +129,103 @@ class ProjectHubProvider(MemoryProvider):
             self._cached_recall = ""
             return ""
 
+    def on_memory_write(
+        self,
+        action: str,
+        target: str,
+        content: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Mirror built-in MEMORY.md writes to ProjectHub if they look project-scoped."""
+        if self._is_scratch or not self._client:
+            return
+        meta = metadata or {}
+        if meta.get("write_origin") == "projecthub_plugin":
+            return  # avoid loops — our own writes coming back in
+        if action != "add" or target != "memory":
+            return
+        if self._looks_project_scoped(content):
+            try:
+                self._client.remember(
+                    project=self._current_project,
+                    insight_type="other",
+                    content=content[:4000],
+                    tags=["mirrored-from-builtin"],
+                    session_id=self._session_id,
+                    metadata={"write_origin": "mirror_from_builtin"},
+                )
+            except Exception as e:
+                logger.warning("mirror failed: %s", e)
+
+    def _looks_project_scoped(self, content: str) -> bool:
+        """Heuristic: does this content reference the current project or cwd?"""
+        if not content:
+            return False
+        cwd = os.environ.get("TERMINAL_CWD") or os.getcwd()
+        signals = [self._current_project.split("/")[-1], self._current_project, cwd]
+        return any(s and s in content for s in signals)
+
+    def on_session_end(self, messages: List[Dict[str, Any]]) -> None:
+        """Run the auxiliary curator over the session and POST 1-3 insights.
+
+        Failures are swallowed — this is post-hoc; we never break Hermes shutdown.
+        """
+        if self._is_scratch or not self._client or not messages:
+            return
+        try:
+            insights = self._run_curator(messages)
+        except Exception as e:
+            logger.warning("curator failed: %s", e)
+            return
+        for ins in insights[:3]:
+            try:
+                tags = list(ins.get("tags", [])) + ["auto-curated"]
+                self._client.remember(
+                    project=self._current_project,
+                    insight_type=ins.get("insight_type", "session_summary"),
+                    content=ins["content"][:4000],
+                    tags=tags,
+                    session_id=self._session_id,
+                    metadata={"write_origin": "curator", "auto_curated": True},
+                )
+            except Exception as e:
+                logger.warning("curator post failed: %s", e)
+
+    def _run_curator(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Call Hermes' auxiliary.curator LLM client to extract insights.
+
+        This is the ONE place the plugin reaches into Hermes internals.
+        Hermes config field: auxiliary.curator (already configured).
+
+        NOTE: the exact import path may need adjustment when integrated with
+        the running Hermes — this is flagged as an open question in the spec.
+        Tests mock this method directly so the import is only attempted at
+        runtime inside Hermes.
+        """
+        try:
+            from agent.auxiliary import get_curator_client  # type: ignore
+        except ImportError as e:
+            logger.warning("curator client import failed: %s", e)
+            return []
+        client = get_curator_client()
+        prompt = (
+            "Review the conversation below and extract 1-3 reusable technical "
+            "insights for project=" + self._current_project + ". For each, "
+            "return JSON with fields: insight_type (decision|bug|pattern|gotcha|"
+            "stack|qa|other), content (1-2 sentences, specific and actionable), "
+            "tags (list of strings). Skip persona/preference items. If nothing "
+            "is worth saving, return an empty list.\n\n"
+            "Output strict JSON: {\"insights\": [...]}.\n\n"
+            "Conversation:\n"
+            + json.dumps(messages, ensure_ascii=False)[:24000]
+        )
+        raw = client.complete(prompt, response_format="json")
+        try:
+            data = json.loads(raw)
+            return data.get("insights", []) if isinstance(data, dict) else []
+        except Exception:
+            return []
+
     def get_tool_schemas(self) -> List[Dict[str, Any]]:
         from tools import ALL_SCHEMAS
         return ALL_SCHEMAS
