@@ -33,8 +33,8 @@ from mcp.types import (
 )
 
 from projecthub_memory_core import (
-    MEMORY_DIR, DAILY_DIR, KNOWLEDGE_DIR, INDEX_FILE,
-    ensure_knowledge_dirs, get_daily_log_path,
+    DAILY_DIR, INDEX_FILE,
+    get_daily_log_path,
     append_to_daily_log, get_project_knowledge_path,
     load_project_knowledge, compile_daily_to_project,
     update_index,
