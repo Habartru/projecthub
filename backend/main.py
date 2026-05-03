@@ -1547,6 +1547,87 @@ def memory_context_get(project: str):
     }
 
 
+@app.get("/api/memory/history")
+def memory_history_get(
+    project: str,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    max_commits: int = 200,
+    include_git: bool = True,
+    include_insights: bool = True,
+):
+    from projecthub_memory_core import DAILY_DIR
+    from datetime import datetime as _dt
+
+    # Resolve project path from DB (if any)
+    path_to_repo = None
+    if "/" in project:
+        category, name = project.split("/", 1)
+    else:
+        category, name = "", project
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT path FROM projects WHERE category = ? AND name = ?", (category, name))
+    row = cursor.fetchone()
+    conn.close()
+    if row and row[0] and os.path.exists(row[0]):
+        path_to_repo = row[0]
+
+    df = _dt.fromisoformat(date_from) if date_from else None
+    dt_ = _dt.fromisoformat(date_to) if date_to else None
+
+    insights = []
+    if include_insights and DAILY_DIR.exists():
+        for f in sorted(DAILY_DIR.glob("*.md")):
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", f.stem):
+                continue
+            day = _dt.strptime(f.stem, "%Y-%m-%d")
+            if df and day < df: continue
+            if dt_ and day > dt_: continue
+            text = f.read_text()
+            for chunk in re.split(r"\n## \[", text)[1:]:
+                if project not in chunk.split("\n", 1)[0]:
+                    continue
+                m_type = re.search(r"\*\*Type:\*\*\s*(\S+)", chunk)
+                m_tags = re.findall(r"#(\w+)", chunk)
+                body = chunk.split("\n\n", 1)[1].split("\n---", 1)[0].strip() if "\n\n" in chunk else ""
+                insights.append({
+                    "date": f.stem,
+                    "type": m_type.group(1) if m_type else "other",
+                    "content": body,
+                    "tags": m_tags,
+                })
+
+    commits = []
+    if include_git and path_to_repo and os.path.isdir(os.path.join(path_to_repo, ".git")):
+        cmd = ["git", "-C", path_to_repo, "log", "--pretty=format:%h|%ci|%s"]
+        if max_commits and max_commits > 0:
+            cmd.append(f"-n{max_commits}")
+        if df: cmd.append(f"--since={df.isoformat()}")
+        if dt_: cmd.append(f"--until={dt_.isoformat()}")
+        try:
+            out = subprocess.check_output(cmd, text=True, timeout=10)
+            for line in out.strip().splitlines():
+                sha, date, msg = line.split("|", 2)
+                commits.append({"sha": sha, "date": date, "message": msg})
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            pass
+
+    timeline = (
+        [{"kind": "commit", "date": c["date"][:10], **c} for c in commits]
+        + [{"kind": "insight", **i} for i in insights]
+    )
+    timeline.sort(key=lambda x: x["date"])
+
+    return {
+        "project": project,
+        "period": {"from": date_from, "to": date_to},
+        "git_commits": commits,
+        "insights": insights,
+        "merged_timeline": timeline,
+    }
+
+
 @app.post("/api/projects/sync")
 def api_sync_projects():
     """Ручная синхронизация проектов с диском (добавляет новые, удаляет несуществующие)"""

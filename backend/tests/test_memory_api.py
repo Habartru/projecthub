@@ -158,3 +158,36 @@ def test_get_context_returns_empty_for_missing(client):
     assert data["exists"] is False
     assert data["context"] == ""
     assert data["char_count"] == 0
+
+
+def test_get_history_merges_git_and_insights(client, tmp_path):
+    """history returns insights ordered by date, plus a git_commits placeholder.
+
+    For v1 we don't fully test git merging (project may not be a real repo
+    in tmp_path); we verify endpoint shape and insight inclusion.
+    """
+    real_dir = tmp_path / "p"
+    real_dir.mkdir()
+    import sqlite3
+    conn = sqlite3.connect(os.environ["PROJECTHUB_DB_PATH"])
+    conn.execute(
+        "INSERT INTO projects (name, category, path, display_name, created_at) VALUES (?, ?, ?, ?, datetime('now'))",
+        ("a", "x", str(real_dir), ""),
+    )
+    conn.commit()
+    conn.close()
+
+    client.post("/api/memory/insight", json={
+        "project": "x/a", "insight_type": "bug",
+        "content": "Found a regression in Z.", "tags": ["regression"],
+    })
+
+    resp = client.get("/api/memory/history", params={"project": "x/a"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["project"] == "x/a"
+    assert "period" in data
+    assert "git_commits" in data and isinstance(data["git_commits"], list)
+    assert "insights" in data and isinstance(data["insights"], list)
+    assert any("Found a regression" in i["content"] for i in data["insights"])
+    assert "merged_timeline" in data
