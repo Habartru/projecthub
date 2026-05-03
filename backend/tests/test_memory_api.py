@@ -123,3 +123,38 @@ def test_post_insight_rejects_invalid_type(client):
         "content": "ok",
     })
     assert resp.status_code == 400
+
+
+def test_get_context_returns_existing_article(client, tmp_path):
+    real_dir = tmp_path / "p"
+    real_dir.mkdir()
+    import sqlite3
+    conn = sqlite3.connect(os.environ["PROJECTHUB_DB_PATH"])
+    conn.execute(
+        "INSERT INTO projects (name, category, path, display_name, created_at) VALUES (?, ?, ?, ?, datetime('now'))",
+        ("a", "x", str(real_dir), ""),
+    )
+    conn.commit()
+    conn.close()
+
+    # Seed an insight first
+    client.post("/api/memory/insight", json={
+        "project": "x/a", "insight_type": "decision",
+        "content": "Decided to use Y.", "tags": [],
+    })
+
+    resp = client.get("/api/memory/context", params={"project": "x/a"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["exists"] is True
+    assert "Decided to use Y." in data["context"]
+    assert data["char_count"] > 0
+
+
+def test_get_context_returns_empty_for_missing(client):
+    resp = client.get("/api/memory/context", params={"project": "system/scratch"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["exists"] is False
+    assert data["context"] == ""
+    assert data["char_count"] == 0

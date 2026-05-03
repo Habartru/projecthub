@@ -1531,6 +1531,22 @@ def memory_insight_post(payload: MemoryInsightIn):
     }
 
 
+@app.get("/api/memory/context")
+def memory_context_get(project: str):
+    path = get_project_knowledge_path(project)
+    if not path.exists():
+        return {"project": project, "exists": False, "context": "", "char_count": 0, "last_updated": None}
+    text = path.read_text()
+    mtime = datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds")
+    return {
+        "project": project,
+        "exists": True,
+        "context": text,
+        "char_count": len(text),
+        "last_updated": mtime,
+    }
+
+
 @app.post("/api/projects/sync")
 def api_sync_projects():
     """Ручная синхронизация проектов с диском (добавляет новые, удаляет несуществующие)"""
