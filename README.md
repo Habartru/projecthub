@@ -105,6 +105,19 @@ Returns git commits + saved session insights merged chronologically.
 - Insight types: `decision` · `bug` · `pattern` · `gotcha` · `stack` · `qa`
 - **Obsidian-compatible vault** at `~/Projects/@memory/brain/`
 
+### Memory backend for agent systems
+
+ProjectHub's brain vault is also a **shared memory backend** that any agent system can plug into. Insights flow in via two channels backed by the same primitives:
+
+- **MCP server** (`mcp-server/server.py`) — used by Claude Code, Codex, and any MCP-compatible agent.
+- **HTTP API** (`/api/memory/*` on the backend) — used by agent systems that have their own plugin model. Endpoints: `POST /api/memory/insight`, `GET /api/memory/context`, `GET /api/memory/history`, `GET /api/memory/projects`.
+
+**Currently integrated:**
+
+- **[Hermes](https://github.com/NousResearch/hermes-agent)** — install the plugin from [`hermes-plugin/`](hermes-plugin/README.md). Hermes gains cwd-aware project resolution at session start, periodic-nudge-driven memory writes, and end-of-session insight extraction. Also available as a one-click "Open in Hermes" launcher in the editor row alongside IDEs.
+
+To integrate another agent system, point its memory layer at `POST /api/memory/insight` with `{project, insight_type, content, tags}` — or use the MCP server directly if it speaks MCP.
+
 ### Docker & Git
 
 - Per-project Docker container list with live status
