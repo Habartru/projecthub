@@ -39,7 +39,7 @@ Restart Hermes (or just start a new session — config is read fresh).
 
 | Env var | Default | Purpose |
 |---|---|---|
-| `PROJECTHUB_URL` | `http://127.0.0.1:8765` | ProjectHub backend endpoint. |
+| `PROJECTHUB_URL` | `http://127.0.0.1:8472` | ProjectHub backend endpoint. |
 | `TERMINAL_CWD` | (Hermes-managed) | Hermes sets this in some run modes; the plugin prefers it over `os.getcwd()` for cwd resolution. |
 
 ## Other terminal emulators (for the "Open in Hermes" UI button)
@@ -55,6 +55,6 @@ ProjectHub's Settings → Editors. Recipes:
 
 ## Troubleshooting
 
-- "ProjectHub backend at http://127.0.0.1:8765 unreachable" → check `systemctl --user status projecthub`.
+- "ProjectHub backend at http://127.0.0.1:8472 unreachable" → check `systemctl --user status projecthub`.
 - Plugin doesn't activate → confirm `memory.provider: projecthub` in `~/.hermes/config.yaml` and that the symlink at `~/.hermes/plugins/projecthub/` resolves.
 - httpx ImportError → run `~/.hermes/hermes-agent/venv/bin/pip install httpx`.

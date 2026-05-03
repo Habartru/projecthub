@@ -43,11 +43,19 @@ class ProjectHubProvider(MemoryProvider):
     # ── Helpers ─────────────────────────────────────────────────────
 
     def _default_client_factory(self):
-        from client import ProjectHubClient
+        # Try relative import first (Hermes loader sets up package context);
+        # fall back to absolute (standalone tests put plugin dir on sys.path).
+        try:
+            from .client import ProjectHubClient  # type: ignore
+        except ImportError:
+            from client import ProjectHubClient  # type: ignore
         return ProjectHubClient()
 
     def _resolve_cwd_project(self) -> tuple[str, bool]:
-        from resolver import resolve_current_project
+        try:
+            from .resolver import resolve_current_project  # type: ignore
+        except ImportError:
+            from resolver import resolve_current_project  # type: ignore
         cwd = os.environ.get("TERMINAL_CWD") or os.getcwd()
         projects = self._client.list_projects() if self._client else []
         return resolve_current_project(cwd, projects)
@@ -227,7 +235,10 @@ class ProjectHubProvider(MemoryProvider):
             return []
 
     def get_tool_schemas(self) -> List[Dict[str, Any]]:
-        from tools import ALL_SCHEMAS
+        try:
+            from .tools import ALL_SCHEMAS  # type: ignore
+        except ImportError:
+            from tools import ALL_SCHEMAS  # type: ignore
         return ALL_SCHEMAS
 
     def handle_tool_call(self, tool_name: str, args: Dict[str, Any], **kwargs) -> str:

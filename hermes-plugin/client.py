@@ -1,6 +1,6 @@
 """Thin httpx client for ProjectHub memory endpoints.
 
-Configurable via PROJECTHUB_URL env var (default http://127.0.0.1:8765).
+Configurable via PROJECTHUB_URL env var (default http://127.0.0.1:8472).
 All errors are converted to dict returns so the caller can show a
 meaningful message to the agent without crashing.
 """
@@ -17,7 +17,7 @@ logger = logging.getLogger("hermes.projecthub")
 
 class ProjectHubClient:
     def __init__(self, base_url: Optional[str] = None, timeout: float = 5.0):
-        self.base_url = (base_url or os.environ.get("PROJECTHUB_URL") or "http://127.0.0.1:8765").rstrip("/")
+        self.base_url = (base_url or os.environ.get("PROJECTHUB_URL") or "http://127.0.0.1:8472").rstrip("/")
         self._http = httpx.Client(base_url=self.base_url, timeout=timeout)
 
     # ── Lifecycle ────────────────────────────────────────────────────
