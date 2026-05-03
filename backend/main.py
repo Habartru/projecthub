@@ -22,6 +22,16 @@ from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 import docker
 
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent / "mcp-server"))
+from projecthub_memory_core import (  # noqa: E402
+    append_to_daily_log,
+    compile_daily_to_project,
+    load_project_knowledge,
+    get_project_knowledge_path,
+)
+
 logger = logging.getLogger(__name__)
 
 # Конфигурация
@@ -29,7 +39,7 @@ __version__ = "2.0.0"
 STARTED_AT = datetime.now()
 PROJECTS_ROOT = Path.home() / "Projects"
 PROJECTS_ROOT.mkdir(parents=True, exist_ok=True)
-DB_PATH = PROJECTS_ROOT / ".projecthub.db"
+DB_PATH = Path(os.environ.get("PROJECTHUB_DB_PATH", str(PROJECTS_ROOT / ".projecthub.db")))
 
 # Activity log retention: drop entries older than this on startup so the
 # table doesn't grow unbounded over years of use.
@@ -100,7 +110,7 @@ def init_db():
             name TEXT NOT NULL,
             path TEXT UNIQUE NOT NULL,
             category TEXT NOT NULL,
-            display_name TEXT NOT NULL,
+            display_name TEXT NOT NULL DEFAULT '',
             description TEXT DEFAULT '',
             status TEXT DEFAULT 'active',
             tags TEXT DEFAULT '[]',
@@ -1326,6 +1336,9 @@ async def lifespan(app: FastAPI):
     yield
 
 app = FastAPI(title="ProjectHub", version=__version__, lifespan=lifespan)
+# Initialise DB schema eagerly so the tables exist even when the lifespan
+# context manager is not entered (e.g. TestClient without `with` statement).
+init_db()
 
 app.add_middleware(
     CORSMiddleware,
@@ -1417,6 +1430,29 @@ def get_projects(
         projects.append(proj)
     
     return {"projects": projects, "total": len(projects), "sort": sort}
+
+
+@app.get("/api/memory/projects")
+def memory_projects():
+    """List projects with absolute paths, filtering orphaned rows.
+
+    Used by Hermes memory-bridge plugin for cwd → project resolution.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT category, name, path FROM projects ORDER BY category, name")
+    rows = cursor.fetchall()
+    conn.close()
+
+    result = []
+    for category, name, path in rows:
+        if not path or not os.path.exists(path):
+            continue
+        full_name = f"{category}/{name}" if category else name
+        result.append({"name": full_name, "path": os.path.abspath(path)})
+
+    return {"projects": result, "total": len(result)}
+
 
 @app.post("/api/projects/sync")
 def api_sync_projects():
