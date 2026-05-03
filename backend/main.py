@@ -45,6 +45,10 @@ DB_PATH = Path(os.environ.get("PROJECTHUB_DB_PATH", str(PROJECTS_ROOT / ".projec
 # table doesn't grow unbounded over years of use.
 ACTIVITY_LOG_RETENTION_DAYS = 730  # ~2 years
 
+def _skip_fs_sync() -> bool:
+    """Return True when tests request filesystem-scan isolation."""
+    return os.environ.get("PROJECTHUB_SKIP_FS_SYNC", "").lower() in ("1", "true", "yes")
+
 # Brain / Knowledge base
 BRAIN_DIR = Path.home() / "Projects" / "@memory" / "brain"
 BRAIN_DAILY = BRAIN_DIR / "daily"
@@ -110,7 +114,7 @@ def init_db():
             name TEXT NOT NULL,
             path TEXT UNIQUE NOT NULL,
             category TEXT NOT NULL,
-            display_name TEXT NOT NULL DEFAULT '',
+            display_name TEXT NOT NULL,
             description TEXT DEFAULT '',
             status TEXT DEFAULT 'active',
             tags TEXT DEFAULT '[]',
@@ -754,6 +758,8 @@ CATEGORY_PRESETS = {
 
 def init_categories(cursor):
     """Инициализация категорий из файловой системы"""
+    if _skip_fs_sync():
+        return
     # Собираем все категории: @-папки + подкатегории (контейнеры)
     all_categories = set()
 
@@ -1332,13 +1338,11 @@ def _prune_activity_log():
 async def lifespan(app: FastAPI):
     init_db()
     _prune_activity_log()
-    sync_projects()
+    if not _skip_fs_sync():
+        sync_projects()
     yield
 
 app = FastAPI(title="ProjectHub", version=__version__, lifespan=lifespan)
-# Initialise DB schema eagerly so the tables exist even when the lifespan
-# context manager is not entered (e.g. TestClient without `with` statement).
-init_db()
 
 app.add_middleware(
     CORSMiddleware,

@@ -19,6 +19,7 @@ def client(tmp_path, monkeypatch):
 
     monkeypatch.setenv("PROJECTHUB_DB_PATH", str(db_path))
     monkeypatch.setenv("PROJECTHUB_BRAIN_HOME", str(brain))
+    monkeypatch.setenv("PROJECTHUB_SKIP_FS_SYNC", "1")
 
     # Force re-import so env vars take effect
     for mod in list(sys.modules):
@@ -26,7 +27,8 @@ def client(tmp_path, monkeypatch):
             del sys.modules[mod]
 
     from main import app  # noqa
-    return TestClient(app)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 def test_memory_projects_returns_only_existing_paths(client, tmp_path):
@@ -38,12 +40,12 @@ def test_memory_projects_returns_only_existing_paths(client, tmp_path):
     import sqlite3
     conn = sqlite3.connect(os.environ["PROJECTHUB_DB_PATH"])
     conn.execute(
-        "INSERT INTO projects (name, category, path, created_at) VALUES (?, ?, ?, datetime('now'))",
-        ("real", "test", str(real_dir)),
+        "INSERT INTO projects (name, category, path, display_name, created_at) VALUES (?, ?, ?, ?, datetime('now'))",
+        ("real", "test", str(real_dir), ""),
     )
     conn.execute(
-        "INSERT INTO projects (name, category, path, created_at) VALUES (?, ?, ?, datetime('now'))",
-        ("ghost", "test", str(tmp_path / "deleted_proj")),
+        "INSERT INTO projects (name, category, path, display_name, created_at) VALUES (?, ?, ?, ?, datetime('now'))",
+        ("ghost", "test", str(tmp_path / "deleted_proj"), ""),
     )
     conn.commit()
     conn.close()
@@ -54,7 +56,7 @@ def test_memory_projects_returns_only_existing_paths(client, tmp_path):
     names = [p["name"] for p in data["projects"]]
     assert "test/real" in names
     assert "test/ghost" not in names
-    assert data["total"] == len([p for p in data["projects"]])
+    assert data["total"] == 1
     # All returned entries must have an absolute path that exists
     for p in data["projects"]:
         assert os.path.isabs(p["path"])
