@@ -78,8 +78,14 @@ def append_to_daily_log(project: str, insight_type: str, content: str, tags: lis
     timestamp = datetime.now().strftime("%H:%M")
     tags_str = " ".join(f"#{t}" for t in tags) if tags else ""
 
+    # Link the project to its knowledge note so daily entries become real graph
+    # edges to the project (otherwise date notes dominate the graph and projects
+    # look like orphans). Slug matches get_project_knowledge_path().
+    proj_slug = project.replace("/", "--").replace(" ", "_")
+    proj_ref = f"[[{proj_slug}|{project}]]"
+
     entry = (
-        f"\n## [{timestamp}] {project}\n"
+        f"\n## [{timestamp}] {proj_ref}\n"
         f"**Type:** {insight_type}  \n"
         f"**Tags:** {tags_str}  \n\n"
         f"{content}\n"
