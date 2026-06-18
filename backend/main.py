@@ -32,7 +32,19 @@ from projecthub_memory_core import (  # noqa: E402
     load_project_knowledge,
     get_project_knowledge_path,
     get_daily_log_path,
+    update_index,
 )
+from projecthub_scan import (  # noqa: E402
+    looks_like_project as _looks_like_project_shared,
+    is_project_dir as _is_project_dir_shared,
+    is_container_dir as _is_container_dir,
+    read_description as _read_description_shared,
+    DATA_DIR_NAMES as _DATA_DIR_NAMES,
+)
+
+# Backward-compat aliases — the predicates moved to projecthub_scan (single
+# source of truth shared with the MCP server); keep the old names importable.
+_is_project_dir = _is_project_dir_shared
 
 logger = logging.getLogger(__name__)
 
@@ -763,20 +775,16 @@ def init_categories(cursor):
     """Инициализация категорий из файловой системы"""
     if _skip_fs_sync():
         return
-    # Собираем все категории: @-папки + подкатегории (контейнеры)
+    # Категории = только @-папки. Контейнеры (чат, сбор данных, ...) больше НЕ
+    # промоутятся в отдельные категории — их проекты остаются в своей @category,
+    # а имя контейнера служит лишь префиксом имени проекта. Это убирает
+    # псевдо-категории и рассинхрон со сканером.
     all_categories = set()
 
     for category_dir in PROJECTS_ROOT.iterdir():
         if not category_dir.is_dir() or not category_dir.name.startswith('@'):
             continue
         all_categories.add(category_dir.name)
-
-        # Ищем контейнерные подпапки (используем ту же логику что scan_projects)
-        for item_dir in category_dir.iterdir():
-            if not item_dir.is_dir() or item_dir.name.startswith('.'):
-                continue
-            if _is_container_dir(item_dir):
-                all_categories.add(item_dir.name)
 
     for idx, cat_name in enumerate(sorted(all_categories)):
         preset = CATEGORY_PRESETS.get(cat_name, {})
@@ -789,59 +797,38 @@ def init_categories(cursor):
             VALUES (?, ?, ?, ?, ?)
         ''', (cat_name, display, icon, color, idx))
 
-PROJECT_MARKERS = {
-    'package.json', 'requirements.txt', 'Cargo.toml', 'go.mod',
-    'pom.xml', 'build.gradle', 'Makefile', 'CMakeLists.txt',
-    'manage.py', 'setup.py', 'pyproject.toml',
-}
+# Project-detection predicates (_is_project_dir, _is_container_dir, marker/
+# monorepo sets) now live in the shared projecthub_scan module so the dashboard
+# and the MCP server agree on what a project is. Imported above as
+# _is_project_dir_shared / _is_container_dir.
 
-def _is_project_dir(d: Path) -> bool:
-    """Проверяет, является ли папка проектом (есть маркеры или .git)"""
-    if (d / '.git').is_dir():
-        return True
-    for marker in PROJECT_MARKERS:
-        if (d / marker).exists():
-            return True
-    return False
+def _make_project_entry(d: Path, name: str, category: str, parent_category: str) -> dict:
+    """Build a project record with type + README description."""
+    return {
+        "name": name,
+        "path": str(d),
+        "category": category,
+        "parent_category": parent_category,
+        "display_name": d.name.replace('_', ' ').replace('-', ' '),
+        "project_type": detect_project_type(d),
+        "description": _read_description_shared(d),
+        "status": "active" if parent_category == "@active" else "archived",
+    }
 
-MONOREPO_PART_NAMES = {
-    'frontend', 'backend', 'server', 'client', 'shared', 'app', 'api',
-    'web', 'mobile', 'core', 'common', 'lib', 'libs', 'packages',
-    'services', 'infra', 'deploy', 'scripts', 'tools', 'docs',
-    'mcp-server', 'collector', 'animation', 'dev',
-}
-
-def _is_container_dir(d: Path) -> bool:
-    """Проверяет, является ли папка контейнером (группой независимых проектов).
-    Отличает от монорепо по трём признакам:
-    1. Подпапки с именами frontend/backend/server/etc → монорепо
-    2. Подпапки содержат имя родителя (vivoai-server в VIVOAI) → монорепо
-    3. Независимые имена → контейнер"""
-    if _is_project_dir(d):
-        return False
-    subdirs = [s for s in d.iterdir() if s.is_dir() and not s.name.startswith('.')]
-    if not subdirs:
-        return False
-    project_subdirs = [s for s in subdirs if _is_project_dir(s)]
-    if not project_subdirs:
-        return False
-    # Если большинство подпапок-проектов — типичные части монорепо → НЕ контейнер
-    monorepo_count = sum(1 for s in project_subdirs if s.name.lower() in MONOREPO_PART_NAMES)
-    if monorepo_count > len(project_subdirs) / 2:
-        return False
-    # Если подпапки содержат имя родителя → это варианты одного проекта, НЕ контейнер
-    # (datalens, datalens-agent, datalens-mcp внутри DATALENS → монорепо)
-    parent_name = d.name.lower()
-    name_shared = sum(1 for s in project_subdirs
-                      if parent_name in s.name.lower() or s.name.lower() in parent_name)
-    if name_shared > len(project_subdirs) / 2:
-        return False
-    # Минимум 2 подпапки-проекта с независимыми именами → контейнер
-    independent = len(project_subdirs) - name_shared
-    return independent >= 2
 
 def scan_projects():
-    """Сканирование проектов с автодетектом контейнерных папок (глубина 2-3)"""
+    """Scan ~/Projects/@category for real projects.
+
+    Logic fixed during the 2026-06 audit:
+    - if an @category folder is itself a project (.git/markers at its root) it is
+      treated as ONE project, not split into its subfolders;
+    - data/asset folders (mp3, models, assets, ...) and build dirs are skipped
+      via the shared ``looks_like_project`` predicate;
+    - container children that are not real projects are filtered out;
+    - container children keep the real @category as their category (no more
+      pseudo-categories like ``r2xGO``/``сбор данных``); the container name is
+      only a name prefix for collision-free uniqueness.
+    """
     projects = []
 
     for category_dir in PROJECTS_ROOT.iterdir():
@@ -850,42 +837,38 @@ def scan_projects():
 
         fs_category = category_dir.name  # @bringo, @active, etc.
 
-        SKIP_DIRS = {'node_modules', 'venv', '.venv', '__pycache__', 'target', 'build', 'dist', '.git', '.idea', '.vscode'}
+        # An @category folder that is itself a git repo / has markers is a SINGLE
+        # project (e.g. @skazka with .git) — do not iterate its subfolders.
+        if _is_project_dir_shared(category_dir):
+            projects.append(_make_project_entry(
+                category_dir, category_dir.name.lstrip('@'), fs_category, fs_category))
+            continue
 
         for item_dir in category_dir.iterdir():
-            if not item_dir.is_dir() or item_dir.name.startswith('.') or item_dir.name in SKIP_DIRS:
+            if not item_dir.is_dir() or item_dir.name.startswith('.') \
+                    or item_dir.name in SCAN_SKIP_DIRS \
+                    or item_dir.name.lower() in _DATA_DIR_NAMES:
                 continue
 
             if _is_container_dir(item_dir):
-                # Это контейнер (чат, сбор данных, etc.) — сканируем подпапки
-                subcategory = item_dir.name  # "чат", "сбор данных"
+                # Container (чат, сбор данных, ...) — scan its sub-projects.
+                subcategory = item_dir.name
                 for sub_project_dir in item_dir.iterdir():
-                    if not sub_project_dir.is_dir() or sub_project_dir.name.startswith('.') or sub_project_dir.name in SKIP_DIRS:
+                    if not sub_project_dir.is_dir() or sub_project_dir.name.startswith('.') \
+                            or sub_project_dir.name in SCAN_SKIP_DIRS:
                         continue
-                    # Уникальное имя: "контейнер/проект" чтобы избежать коллизий
-                    unique_name = f"{subcategory}/{sub_project_dir.name}"
-                    project_type = detect_project_type(sub_project_dir)
-                    projects.append({
-                        "name": unique_name,
-                        "path": str(sub_project_dir),
-                        "category": subcategory,
-                        "parent_category": fs_category,
-                        "display_name": sub_project_dir.name.replace('_', ' ').replace('-', ' '),
-                        "project_type": project_type,
-                        "status": "active" if fs_category == "@active" else "archived"
-                    })
+                    if not _looks_like_project_shared(sub_project_dir):
+                        continue
+                    # Name carries the container prefix to stay collision-free,
+                    # but category stays the real @category (no pseudo-category).
+                    projects.append(_make_project_entry(
+                        sub_project_dir, f"{subcategory}/{sub_project_dir.name}",
+                        fs_category, fs_category))
             else:
-                # Обычный проект
-                project_type = detect_project_type(item_dir)
-                projects.append({
-                    "name": item_dir.name,
-                    "path": str(item_dir),
-                    "category": fs_category,
-                    "parent_category": fs_category,
-                    "display_name": item_dir.name.replace('_', ' ').replace('-', ' '),
-                    "project_type": project_type,
-                    "status": "active" if fs_category == "@active" else "archived"
-                })
+                if not _looks_like_project_shared(item_dir):
+                    continue
+                projects.append(_make_project_entry(
+                    item_dir, item_dir.name, fs_category, fs_category))
 
     return projects
 
@@ -1291,27 +1274,33 @@ def sync_projects():
 
     for proj in scanned:
         # Проверяем по пути (более надёжно чем по имени)
-        cursor.execute("SELECT id, category FROM projects WHERE path = ?", (proj["path"],))
+        cursor.execute("SELECT id, category, description FROM projects WHERE path = ?", (proj["path"],))
         existing = cursor.fetchone()
 
         if existing:
-            proj_id, db_category = existing
+            proj_id, db_category, db_description = existing
             # Не перезаписываем категорию если пользователь её вручную менял
             was_auto = db_category in (proj.get("parent_category", proj["category"]), proj["category"])
             new_category = proj["category"] if was_auto else db_category
+            # Заполняем description из README только если в БД пусто
+            # (не затираем то, что пользователь правил вручную).
+            new_description = db_description
+            if not (db_description or "").strip() and proj.get("description"):
+                new_description = proj["description"]
             cursor.execute('''
                 UPDATE projects
-                SET project_type = ?, name = ?, display_name = ?, status = ?, category = ?
+                SET project_type = ?, name = ?, display_name = ?, status = ?, category = ?, description = ?
                 WHERE id = ?
             ''', (proj["project_type"], proj["name"],
-                  proj["display_name"], proj["status"], new_category, proj_id))
+                  proj["display_name"], proj["status"], new_category, new_description, proj_id))
         else:
             # Создаем новый проект
             cursor.execute('''
-                INSERT INTO projects (name, path, category, display_name, project_type, status)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO projects (name, path, category, display_name, project_type, status, description)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
             ''', (proj["name"], proj["path"], proj["category"],
-                  proj["display_name"], proj["project_type"], proj["status"]))
+                  proj["display_name"], proj["project_type"], proj["status"],
+                  proj.get("description", "")))
 
     # Обновляем категории
     init_categories(cursor)
@@ -2715,46 +2704,24 @@ def brain_log(payload: dict):
     if insight_type not in allowed_types:
         insight_type = "other"
 
-    BRAIN_DAILY.mkdir(parents=True, exist_ok=True)
-    BRAIN_PROJECTS.mkdir(parents=True, exist_ok=True)
-
-    today = datetime.now().strftime("%Y-%m-%d")
+    # SINGLE SOURCE OF TRUTH: write through memory_core exactly like the MCP
+    # server's log_session_insight — same dirs, same slug, same formatting — and
+    # rebuild the index so dashboard-logged notes never become orphan nodes.
     timestamp = datetime.now().strftime("%H:%M")
-    daily_path = BRAIN_DAILY / f"{today}.md"
-    tags_str = " ".join(f"#{t}" for t in tags) if tags else ""
+    append_to_daily_log(project_name, insight_type, content, tags)
+    article = compile_daily_to_project(project_name, [{
+        "type": insight_type,
+        "timestamp": timestamp,
+        "content": content,
+        "tags": tags,
+    }])
+    update_index()
 
-    entry = (
-        f"\n## [{timestamp}] {project_name}\n"
-        f"**Type:** {insight_type}  \n"
-        f"**Tags:** {tags_str}  \n\n"
-        f"{content}\n\n---\n"
-    )
-
-    if not daily_path.exists():
-        daily_path.write_text(f"# Daily Log — {today}\n\n*Logged via ProjectHub Brain*\n" + entry)
-    else:
-        with daily_path.open("a") as f:
-            f.write(entry)
-
-    proj_file = BRAIN_PROJECTS / f"{brain_project_slug(project_name)}.md"
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
-    new_section = (
-        f"\n## Update {now_str}\n\n"
-        f"### {insight_type} — {now_str}\n"
-        f"{tags_str}  \n\n{content}\n\n"
-    )
-    if proj_file.exists():
-        with proj_file.open("a") as f:
-            f.write(new_section)
-    else:
-        proj_file.write_text(
-            f"# {project_name}\n\n"
-            f"*Knowledge article. Created: {now_str}*\n\n"
-            f"## Decisions\n"
-            + new_section
-        )
-
-    return {"status": "ok", "daily_log": str(daily_path), "article": str(proj_file)}
+    return {
+        "status": "ok",
+        "daily_log": str(get_daily_log_path()),
+        "article": article,
+    }
 
 
 @app.get("/api/brain/search")

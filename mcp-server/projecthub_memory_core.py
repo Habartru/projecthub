@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import os
 import re
+import fcntl
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -41,6 +43,28 @@ def ensure_knowledge_dirs() -> None:
         d.mkdir(parents=True, exist_ok=True)
 
 
+@contextmanager
+def vault_lock():
+    """Serialize all vault writes across processes (backend + MCP + tools).
+
+    A single advisory lock file (MEMORY_DIR/.brain.lock) guarded by flock means
+    concurrent writers (FastAPI dashboard, MCP server, ad-hoc scripts) can never
+    interleave appends or race on index regeneration. Leaf write functions take
+    this lock; callers must NOT nest calls that re-acquire it.
+    """
+    MEMORY_DIR.mkdir(parents=True, exist_ok=True)
+    lock_path = MEMORY_DIR / ".brain.lock"
+    fd = open(lock_path, "w")
+    try:
+        fcntl.flock(fd.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
+        finally:
+            fd.close()
+
+
 def get_daily_log_path() -> Path:
     """Get path to today's daily log."""
     today = datetime.now().strftime("%Y-%m-%d")
@@ -48,7 +72,7 @@ def get_daily_log_path() -> Path:
 
 
 def append_to_daily_log(project: str, insight_type: str, content: str, tags: list[str]) -> None:
-    """Append an insight entry to today's daily log."""
+    """Append an insight entry to today's daily log (process-safe)."""
     ensure_knowledge_dirs()
     log_path = get_daily_log_path()
     timestamp = datetime.now().strftime("%H:%M")
@@ -62,15 +86,16 @@ def append_to_daily_log(project: str, insight_type: str, content: str, tags: lis
         f"\n---\n"
     )
 
-    if not log_path.exists():
-        header = (
-            f"# Daily Log — {datetime.now().strftime('%Y-%m-%d')}\n\n"
-            f"*Автоматически записывается MCP project-context*\n\n"
-        )
-        log_path.write_text(header + entry)
-    else:
-        with log_path.open("a") as f:
-            f.write(entry)
+    with vault_lock():
+        if not log_path.exists():
+            header = (
+                f"# Daily Log — {datetime.now().strftime('%Y-%m-%d')}\n\n"
+                f"*Автоматически записывается MCP project-context*\n\n"
+            )
+            log_path.write_text(header + entry)
+        else:
+            with log_path.open("a") as f:
+                f.write(entry)
 
 
 def get_project_knowledge_path(project_name: str) -> Path:
@@ -92,8 +117,6 @@ def compile_daily_to_project(project_name: str, entries: list[dict]) -> str:
     proj_file = get_project_knowledge_path(project_name)
     ensure_knowledge_dirs()
 
-    existing = proj_file.read_text() if proj_file.exists() else ""
-
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     new_entries_md = ""
     for e in entries:
@@ -104,19 +127,20 @@ def compile_daily_to_project(project_name: str, entries: list[dict]) -> str:
             f"{e['content']}\n\n"
         )
 
-    if existing:
-        # Insert new entries after the first ## section or at end
-        updated = existing + f"\n## Обновление {now}\n" + new_entries_md
-    else:
-        safe_name = project_name.replace("/", " / ")
-        updated = (
-            f"# {safe_name}\n\n"
-            f"*Knowledge article. Последнее обновление: {now}*\n\n"
-            f"## История решений\n"
-            + new_entries_md
-        )
-
-    proj_file.write_text(updated)
+    with vault_lock():
+        existing = proj_file.read_text() if proj_file.exists() else ""
+        if existing:
+            # Insert new entries after the first ## section or at end
+            updated = existing + f"\n## Обновление {now}\n" + new_entries_md
+        else:
+            safe_name = project_name.replace("/", " / ")
+            updated = (
+                f"# {safe_name}\n\n"
+                f"*Knowledge article. Последнее обновление: {now}*\n\n"
+                f"## История решений\n"
+                + new_entries_md
+            )
+        proj_file.write_text(updated)
     return str(proj_file)
 
 
@@ -162,24 +186,35 @@ def update_index() -> None:
     if not daily_section:
         daily_section = "*(пока пусто)*\n"
 
-    content = INDEX_FILE.read_text() if INDEX_FILE.exists() else ""
+    with vault_lock():
+        content = INDEX_FILE.read_text() if INDEX_FILE.exists() else ""
 
-    content = re.sub(
-        r"<!-- PROJECTS_INDEX_START -->.*?<!-- PROJECTS_INDEX_END -->",
-        f"<!-- PROJECTS_INDEX_START -->\n{projects_section}<!-- PROJECTS_INDEX_END -->",
-        content,
-        flags=re.DOTALL
-    )
-    content = re.sub(
-        r"<!-- CONCEPTS_INDEX_START -->.*?<!-- CONCEPTS_INDEX_END -->",
-        f"<!-- CONCEPTS_INDEX_START -->\n{concepts_section}<!-- CONCEPTS_INDEX_END -->",
-        content,
-        flags=re.DOTALL
-    )
-    content = re.sub(
-        r"<!-- DAILY_INDEX_START -->.*?<!-- DAILY_INDEX_END -->",
-        f"<!-- DAILY_INDEX_START -->\n{daily_section}<!-- DAILY_INDEX_END -->",
-        content,
-        flags=re.DOTALL
-    )
-    INDEX_FILE.write_text(content)
+        # If the index has no marker blocks yet (fresh vault), seed a skeleton
+        # so the sections below have somewhere to be injected.
+        if "<!-- PROJECTS_INDEX_START -->" not in content:
+            content += (
+                "\n# Knowledge Index\n\n"
+                "## Projects\n<!-- PROJECTS_INDEX_START -->\n<!-- PROJECTS_INDEX_END -->\n\n"
+                "## Daily\n<!-- DAILY_INDEX_START -->\n<!-- DAILY_INDEX_END -->\n\n"
+                "## Concepts\n<!-- CONCEPTS_INDEX_START -->\n<!-- CONCEPTS_INDEX_END -->\n"
+            )
+
+        content = re.sub(
+            r"<!-- PROJECTS_INDEX_START -->.*?<!-- PROJECTS_INDEX_END -->",
+            f"<!-- PROJECTS_INDEX_START -->\n{projects_section}<!-- PROJECTS_INDEX_END -->",
+            content,
+            flags=re.DOTALL
+        )
+        content = re.sub(
+            r"<!-- CONCEPTS_INDEX_START -->.*?<!-- CONCEPTS_INDEX_END -->",
+            f"<!-- CONCEPTS_INDEX_START -->\n{concepts_section}<!-- CONCEPTS_INDEX_END -->",
+            content,
+            flags=re.DOTALL
+        )
+        content = re.sub(
+            r"<!-- DAILY_INDEX_START -->.*?<!-- DAILY_INDEX_END -->",
+            f"<!-- DAILY_INDEX_START -->\n{daily_section}<!-- DAILY_INDEX_END -->",
+            content,
+            flags=re.DOTALL
+        )
+        INDEX_FILE.write_text(content)

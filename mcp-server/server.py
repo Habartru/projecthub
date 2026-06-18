@@ -39,6 +39,10 @@ from projecthub_memory_core import (
     load_project_knowledge, compile_daily_to_project,
     update_index,
 )
+from projecthub_scan import (
+    looks_like_project, is_project_dir, is_container_dir,
+    SKIP_DIRS, DATA_DIR_NAMES,
+)
 
 # Logging setup
 LOG_DIR = Path.home() / ".config" / "project-context"
@@ -145,16 +149,39 @@ class ProjectContext:
 
     @classmethod
     def list_projects(cls) -> list[str]:
-        """Get list of all projects as category/project_name."""
+        """Get list of all projects as category/project_name.
+
+        Uses the SAME shared predicates as the dashboard scanner
+        (projecthub_scan) so the MCP inventory can never diverge: data/asset and
+        build folders are skipped, @category folders that are themselves a
+        project are listed as one, and container folders are descended one level.
+        """
         if not PROJECTS_DIR.exists():
             return []
         projects = []
         for cat_dir in sorted(PROJECTS_DIR.iterdir()):
-            if cat_dir.is_dir() and cat_dir.name.startswith("@"):
-                display_cat = cat_dir.name.lstrip("@")
-                for proj_dir in sorted(cat_dir.iterdir()):
-                    if proj_dir.is_dir() and not proj_dir.name.startswith("."):
-                        projects.append(f"{display_cat}/{proj_dir.name}")
+            if not (cat_dir.is_dir() and cat_dir.name.startswith("@")):
+                continue
+            display_cat = cat_dir.name.lstrip("@")
+
+            # @category that is itself a project → one project.
+            if is_project_dir(cat_dir):
+                projects.append(f"{display_cat}/{cat_dir.name.lstrip('@')}")
+                continue
+
+            for proj_dir in sorted(cat_dir.iterdir()):
+                if not proj_dir.is_dir() or proj_dir.name.startswith(".") \
+                        or proj_dir.name in SKIP_DIRS \
+                        or proj_dir.name.lower() in DATA_DIR_NAMES:
+                    continue
+                if looks_like_project(proj_dir):
+                    projects.append(f"{display_cat}/{proj_dir.name}")
+                elif is_container_dir(proj_dir):
+                    for sub in sorted(proj_dir.iterdir()):
+                        if sub.is_dir() and not sub.name.startswith(".") \
+                                and sub.name not in SKIP_DIRS \
+                                and looks_like_project(sub):
+                            projects.append(f"{display_cat}/{proj_dir.name}/{sub.name}")
         return projects
 
     @classmethod
