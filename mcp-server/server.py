@@ -43,6 +43,7 @@ from projecthub_scan import (
     looks_like_project, is_project_dir, is_container_dir,
     SKIP_DIRS, DATA_DIR_NAMES,
 )
+from projecthub_resolver import resolve_current_project, log_entry_matches_project
 
 # Logging setup
 LOG_DIR = Path.home() / ".config" / "project-context"
@@ -536,6 +537,145 @@ def get_databases() -> dict:
 
 
 # ==============================================================================
+# CURRENT-PROJECT RESOLUTION (cwd → project) + "resume" bundle
+# ==============================================================================
+
+def _key_to_path(key: str) -> Path:
+    """Real directory for a list_projects() key.
+
+    resolve_project() cannot round-trip the "@category is itself a project"
+    case (key "Autoher/Autoher" actually lives at ~/Projects/@Autoher, not
+    ~/Projects/@Autoher/Autoher), so fall back to the category dir when the
+    literal resolution is not a directory.
+    """
+    _, path = ProjectContext.resolve_project(key)
+    if path.is_dir():
+        return path
+    cat = key.split("/", 1)[0]
+    alt = PROJECTS_DIR / f"@{cat}"
+    return alt if alt.is_dir() else path
+
+
+def _projects_with_paths() -> list[dict]:
+    """[{name, path}] for every known project, for cwd → project resolution."""
+    out = []
+    for key in ProjectContext.list_projects():
+        out.append({"name": key, "path": str(_key_to_path(key))})
+    return out
+
+
+def _recent_git_commits(path: Path, limit: int = 10) -> list[dict]:
+    """Last `limit` commits (newest first), or [] if the project has no git."""
+    if not (path / ".git").exists():
+        return []
+    cmd = ["git", "log", "--no-merges", "--pretty=format:%H|%ai|%an|%s"]
+    if limit and limit > 0:
+        cmd.append(f"-{limit}")
+    commits = []
+    try:
+        r = subprocess.run(cmd, cwd=path, capture_output=True, text=True, timeout=15)
+        for line in r.stdout.strip().splitlines():
+            parts = line.split("|", 3)
+            if len(parts) == 4:
+                sha, date, author, msg = parts
+                commits.append({
+                    "sha": sha[:8], "date": date[:10], "time": date[11:16],
+                    "author": author, "message": msg,
+                })
+    except Exception as e:
+        logger.warning("git log failed for %s: %s", path, e)
+    return commits
+
+
+def _project_recent_insights(key: str, limit: int = 5) -> list[dict]:
+    """Most-recent saved insights for a project (newest first) across daily logs."""
+    if not DAILY_DIR.exists():
+        return []
+    pattern = re.compile(
+        r"## \[(\d{2}:\d{2})\] (.+?)\n\*\*Type:\*\* (.+?)  \n\*\*Tags:\*\* (.*?)  \n\n(.*?)\n\n---",
+        re.DOTALL,
+    )
+    found = []
+    for log_file in sorted(DAILY_DIR.glob("*.md")):
+        log_date = log_file.stem  # YYYY-MM-DD
+        try:
+            content = log_file.read_text()
+        except Exception:
+            continue
+        for m in pattern.finditer(content):
+            time_str, proj, itype, tags_raw, body = m.groups()
+            if not log_entry_matches_project(proj, key):
+                continue
+            tags = [t.lstrip("#") for t in tags_raw.split() if t.startswith("#")]
+            found.append({
+                "date": log_date, "time": time_str, "type": itype.strip(),
+                "tags": tags, "content": body.strip(),
+            })
+    found.sort(key=lambda e: (e["date"], e["time"]), reverse=True)
+    return found[:limit] if limit and limit > 0 else found
+
+
+def build_current_context(
+    cwd: str, max_commits: int = 10, max_insights: int = 5
+) -> tuple[Optional[str], str]:
+    """Resolve cwd → project and assemble a "resume from last point" bundle.
+
+    Returns (project_key or None, rendered_text). When cwd is not inside any
+    known project, project_key is None and the text explains how to pick one.
+    Other projects always stay reachable via list_all_projects / the per-project
+    tools — this only decides what is auto-loaded, never what is accessible.
+    """
+    projects = _projects_with_paths()
+    key, is_scratch = resolve_current_project(cwd, projects)
+
+    if is_scratch or not key:
+        available = "\n".join(f"  - {p['name']}" for p in projects)
+        return None, (
+            "NO PROJECT OPEN HERE\n"
+            f"Working directory '{cwd}' is not inside any known project under "
+            f"{PROJECTS_DIR}.\n\n"
+            "Pass an explicit `cwd`, or open one of these projects "
+            "(use get_project_context / get_project_history for any of them):\n"
+            f"{available}"
+        )
+
+    # Use the real path from the walk — do NOT re-resolve the name, since
+    # resolve_project() is lossy for the "@category is itself a project" case.
+    entry = next((p for p in projects if p["name"] == key), None)
+    if entry is None:  # defensive; resolve returned a name we don't have
+        return None, f"Resolved project '{key}' not found in project list."
+    rkey = key
+    path = Path(entry["path"])
+
+    info = get_project_info(rkey, path)
+    bundle = {
+        "current_project": rkey,
+        "resolved_from_cwd": cwd,
+        "stack": info.get("type", []),
+        "has_git": info.get("has_git"),
+        "has_docker": info.get("has_docker"),
+        "has_venv": info.get("has_venv"),
+        "dependencies": info.get("dependencies"),
+        "recent_commits": _recent_git_commits(path, max_commits),
+        "recent_insights": _project_recent_insights(rkey, max_insights),
+    }
+
+    text = ProjectContext.format_response(rkey, path, bundle)
+    knowledge = load_project_knowledge(rkey)
+    if knowledge:
+        text += (
+            "\n\n==================== PROJECT MEMORY (knowledge base) "
+            "====================\n" + knowledge
+        )
+    else:
+        text += (
+            "\n\n(no compiled knowledge base yet — use log_session_insight to "
+            "start one)"
+        )
+    return rkey, text
+
+
+# ==============================================================================
 # ==============================================================================
 # MCP TOOLS
 # ==============================================================================
@@ -544,6 +684,40 @@ def get_databases() -> dict:
 async def list_tools() -> list[Tool]:
     """List available tools."""
     return [
+        Tool(
+            name="get_current_context",
+            description="""AUTO-ONBOARD for the project open in the current working directory.
+
+Call this FIRST at the start of a session. It resolves cwd → project and returns
+the full "resume" bundle so you immediately understand the project and can
+continue from the last point of development:
+- stack, dependencies, git/docker/venv flags
+- recent git commits (latest activity)
+- latest saved insights (recent decisions/bugs/patterns)
+- the compiled knowledge base (project memory)
+
+Pass `cwd` with your absolute working directory when you know it (most reliable);
+otherwise the server's own working directory is used. Every other project stays
+fully available via list_all_projects / get_project_context — this only decides
+what is auto-loaded, never what is accessible.""",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "cwd": {
+                        "type": "string",
+                        "description": "Absolute working directory to resolve. Optional; defaults to the MCP server process cwd.",
+                    },
+                    "max_commits": {
+                        "type": "integer",
+                        "description": "How many recent commits to include (default 10).",
+                    },
+                    "max_insights": {
+                        "type": "integer",
+                        "description": "How many recent saved insights to include (default 5).",
+                    },
+                },
+            },
+        ),
         Tool(
             name="list_all_projects",
             description="""List ALL projects in the system.
@@ -799,7 +973,18 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     logger.info(f"Tool call: {name}, args: {arguments}")
 
     try:
-        if name == "list_all_projects":
+        if name == "get_current_context":
+            cwd = arguments.get("cwd") or os.getcwd()
+            max_commits = arguments.get("max_commits", 10)
+            max_insights = arguments.get("max_insights", 5)
+            rkey, text = build_current_context(cwd, max_commits, max_insights)
+            # Remember the open project only on an explicit tool call — passive
+            # resource reads (project://current) must not mutate server state.
+            if rkey:
+                ProjectContext._current_project = rkey
+            return [TextContent(type="text", text=text)]
+
+        elif name == "list_all_projects":
             projects = ProjectContext.list_projects()
             result = {
                 "total_count": len(projects),
@@ -1243,6 +1428,12 @@ async def list_resources() -> list[Resource]:
             description="List of all projects",
             mimeType="application/json"
         ),
+        Resource(
+            uri="project://current",
+            name="Current Project Context",
+            description="Auto-resolved memory + recent progress for the project in the current working directory",
+            mimeType="text/plain"
+        ),
     ]
 
 
@@ -1271,6 +1462,14 @@ async def read_resource(uri: str) -> str:
                 "type": info["type"]
             })
         return json.dumps(projects, ensure_ascii=False, indent=2)
+
+    elif uri == "project://current":
+        # Best-effort: resources cannot take args, so this uses the server's
+        # own cwd. The get_current_context tool (with an explicit `cwd`) is the
+        # reliable path; this resource is a convenience for clients that
+        # auto-surface resources.
+        _, text = build_current_context(os.getcwd())
+        return text
 
     elif uri.startswith("project://"):
         parts = uri.replace("project://", "").split("/")
