@@ -94,6 +94,13 @@ class ProjectContext:
             if project_path.is_dir():
                 display_cat = cat_dir.lstrip("@")
                 return f"{display_cat}/{name}", project_path
+            # @category that is itself a project is listed as "cat/cat"
+            # (see list_projects) — resolve that key to the category dir itself.
+            cat_path = PROJECTS_DIR / cat_dir
+            if name == cat_dir.lstrip("@") and cat_path.is_dir() \
+                    and is_project_dir(cat_path):
+                display_cat = cat_dir.lstrip("@")
+                return f"{display_cat}/{name}", cat_path
             return None, project_path
 
         # Search across all categories
@@ -105,6 +112,11 @@ class ProjectContext:
                     if candidate.is_dir():
                         display_cat = cat_dir.name.lstrip("@")
                         matches.append((f"{display_cat}/{project_name}", candidate))
+                    elif project_name == cat_dir.name.lstrip("@") \
+                            and is_project_dir(cat_dir):
+                        # @category that is itself a project (key "cat/cat")
+                        display_cat = cat_dir.name.lstrip("@")
+                        matches.append((f"{display_cat}/{project_name}", cat_dir))
 
         if len(matches) == 1:
             return matches[0]
