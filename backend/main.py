@@ -2665,7 +2665,7 @@ def brain_projects():
 @app.get("/api/brain/projects/{slug}")
 def brain_project_detail(slug: str):
     """Get full knowledge article for a project."""
-    safe_slug = re.sub(r"[^a-zA-Z0-9@\-_]", "", slug)
+    safe_slug = re.sub(r"[^\w@\-]", "", slug, flags=re.UNICODE)
     path = BRAIN_PROJECTS / f"{safe_slug}.md"
     if not path.exists():
         raise HTTPException(status_code=404, detail="Knowledge article not found")

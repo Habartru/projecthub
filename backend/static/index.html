@@ -383,6 +383,16 @@
             white-space: nowrap;
         }
         
+        .project-description {
+            font-size: 12px;
+            line-height: 1.35;
+            color: var(--text-secondary, var(--text-muted));
+            margin: 0 0 8px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
         .project-path {
             font-size: 11px;
             color: var(--text-muted);
@@ -1852,6 +1862,7 @@
                         </div>
                     </div>
                     <div class="project-path">${escapeHtml(p.path)}</div>
+                    ${p.description ? `<div class="project-description">${escapeHtml(p.description)}</div>` : ''}
                     <div class="project-tags">
                         ${(p.tags || []).map(t => `<span class="tag">${escapeHtml(t)}</span>`).join('')}
                     </div>
@@ -2213,6 +2224,10 @@
             const art = document.getElementById('brain-article');
             art.innerHTML = '<div style="padding:20px;color:var(--text-secondary)">Загрузка...</div>';
             const r = await fetch(`/api/brain/projects/${slug}`);
+            if (!r.ok) {
+                art.innerHTML = '<div style="padding:20px;color:var(--text-secondary)">' + (t('brain.not_found') || 'Ничего не найдено') + ' (' + r.status + ')</div>';
+                return;
+            }
             const data = await r.json();
             const displayName = slug.replace(/--/g, '/').replace(/_/g, ' ');
             const typeColors = {decision:'decision',bug:'bug',pattern:'pattern',gotcha:'gotcha',stack:'stack',qa:'qa',other:'other'};
